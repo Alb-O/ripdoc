@@ -8,6 +8,7 @@ use std::{
 
 use cargo::{core::Workspace, ops, util::context::GlobalContext};
 use once_cell::sync::Lazy;
+use rustdoc_json::PackageTarget;
 use rustdoc_types::Crate;
 use semver::Version;
 use tempfile::TempDir;
@@ -256,20 +257,33 @@ impl CargoPath {
             return load_std_library_json(actual_crate, display_name);
         }
 
-        // First check if this crate has a library target by reading Cargo.toml
         let manifest_path = self.manifest_path()?;
+
+        // Determine which target to document (lib or bin)
         let manifest_content = fs::read_to_string(&manifest_path)?;
         let manifest: cargo_toml::Manifest = cargo_toml::Manifest::from_str(&manifest_content)
             .map_err(|e| RuskelError::ManifestParse(e.to_string()))?;
 
-        // Check if there's a [lib] section or if src/lib.rs exists
-        let has_lib = manifest.lib.is_some() || self.as_path().join("src/lib.rs").exists();
-
-        if !has_lib {
-            return Err(RuskelError::Generate(
-                "error: no library targets found in package".to_string(),
-            ));
-        }
+        let package_target = if manifest.lib.is_some() || self.as_path().join("src/lib.rs").exists() {
+            // Package has a library target
+            PackageTarget::Lib
+        } else if !manifest.bin.is_empty() {
+            // Package has explicit binary targets, use the first one
+            let first_bin = &manifest.bin[0];
+            PackageTarget::Bin(first_bin.name.clone().unwrap_or_else(|| {
+                manifest.package.as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| "main".to_string())
+            }))
+        } else if self.as_path().join("src/main.rs").exists() {
+            // Package has default binary structure (src/main.rs)
+            PackageTarget::Bin(manifest.package.as_ref()
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| "main".to_string()))
+        } else {
+            // Fallback to Lib (will fail if there's truly no target)
+            PackageTarget::Lib
+        };
 
         let mut captured_stdout = Vec::new();
         let mut captured_stderr = Vec::new();
@@ -283,6 +297,7 @@ impl CargoPath {
 
         let build_result = builder
             .manifest_path(manifest_path)
+            .package_target(package_target)
             .document_private_items(private_items)
             .no_default_features(no_default_features)
             .all_features(all_features)
@@ -446,6 +461,23 @@ impl CargoPath {
         }
         Ok(None)
     }
+
+    /// List all packages in the current workspace.
+    fn list_workspace_packages(&self) -> Result<Vec<String>> {
+        let workspace_manifest_path = self.manifest_path()?;
+        let config = create_quiet_cargo_config(false)?;
+
+        let workspace = Workspace::new(&workspace_manifest_path, &config)
+            .map_err(|err| convert_cargo_error(&err))?;
+
+        let mut packages = Vec::new();
+        for package in workspace.members() {
+            packages.push(package.name().as_str().to_string());
+        }
+
+        packages.sort();
+        Ok(packages)
+    }
 }
 
 /// Create a cargo configuration with minimal output suited for library usage.
@@ -578,9 +610,14 @@ impl ResolvedTarget {
                         Ok(Self::new(cargo_path, &target.path))
                     } else if cargo_path.is_workspace()? {
                         if target.path.is_empty() {
-                            Err(RuskelError::InvalidTarget(
-                                "No package specified in workspace".to_string(),
-                            ))
+                            // List available packages in the workspace
+                            let packages = cargo_path.list_workspace_packages()?;
+                            let mut error_msg = "No package specified in workspace.\nAvailable packages:".to_string();
+                            for package in packages {
+                                error_msg.push_str(&format!("\n  - {package}"));
+                            }
+                            error_msg.push_str("\n\nUsage: ruskel <package-name>");
+                            Err(RuskelError::InvalidTarget(error_msg))
                         } else {
                             let package_name = &target.path[0];
                             if let Some(package) =
@@ -804,12 +841,6 @@ fn map_rustdoc_build_error(
         }
         other => {
             let err_msg = other.to_string();
-
-            if err_msg.contains("no library targets found in package") {
-                return RuskelError::Generate(
-                    "error: no library targets found in package".to_string(),
-                );
-            }
 
             if err_msg.contains("toolchain") && err_msg.contains("is not installed") {
                 let install_msg = if is_rustup_available() {
