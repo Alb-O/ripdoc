@@ -273,9 +273,6 @@ across crates using the `--search` flag. Here are the relevant flags:
 # Inspect the current project
 ruskel
 
-# Query a standard library trait
-ruskel std::io::Read
-
 # In a workspace with a crate 'mycrate'
 ruskel mycrate
 
@@ -298,9 +295,9 @@ ruskel /my/path::foo
 ruskel serde@1.0.0
 
 # Search for "status" in the reqwest crate, matching names, signatures and doc comments
-ruskel reqwest --search status 
+ruskel reqwest --search status
 
-# Search for "status" in the reqwest crate, matching only names and signatures 
+# Search for "status" in the reqwest crate, matching only names and signatures
 ruskel reqwest --search status --search-spec name,signature
 
 # Search for "status" in the reqwest crate, matching docs only
