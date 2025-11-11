@@ -841,6 +841,7 @@ fn map_rustdoc_build_error(
         }
         other => {
             let err_msg = other.to_string();
+            let stderr_str = String::from_utf8_lossy(captured_stderr);
 
             if err_msg.contains("toolchain") && err_msg.contains("is not installed") {
                 let install_msg = if is_rustup_available() {
@@ -851,6 +852,18 @@ fn map_rustdoc_build_error(
                 return RuskelError::Generate(
                     format!("ruskel requires the nightly toolchain to be installed - {install_msg}")
                 );
+            }
+
+            // Check for nightly feature compatibility issues
+            if stderr_str.contains("unknown feature") || stderr_str.contains("E0635") {
+                return RuskelError::Generate(format!(
+                    "Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n\
+                    This typically happens when old crates use nightly features that have been renamed, stabilized, or removed.\n\
+                    \nPossible solutions:\n\
+                    1. Try updating your nightly toolchain (or use an older version)\n\
+                    2. The crate maintainers may need to update their dependencies\n\
+                    \nOriginal error: {err_msg}"
+                ));
             }
 
             if err_msg.contains("Failed to build rustdoc JSON") {
@@ -866,6 +879,19 @@ fn map_rustdoc_build_error(
 fn format_rustdoc_failure(captured_stderr: &[u8], silent: bool) -> RuskelError {
     let stderr_raw = String::from_utf8_lossy(captured_stderr).into_owned();
     let stderr_trimmed = stderr_raw.trim();
+
+    // Check for nightly feature compatibility issues
+    if stderr_trimmed.contains("unknown feature") || stderr_trimmed.contains("E0635") {
+        return RuskelError::Generate(
+            "Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n\
+            This typically happens when old crates use nightly features that have been renamed, stabilized, or removed.\n\
+            \nPossible solutions:\n\
+            1. Try with a different nightly toolchain version\n\
+            2. The crate maintainers may need to update their dependencies\n\
+            \nNote: Some older crates may not be compatible with recent nightly versions.".to_string()
+        );
+    }
+
     let summary = extract_primary_diagnostic(stderr_trimmed).unwrap_or_else(|| {
         "rustdoc exited with an error; rerun with --verbose for full diagnostics.".to_string()
     });

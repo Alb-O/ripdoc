@@ -525,16 +525,35 @@ impl RenderState<'_, '_> {
             if let Some(source_id) = &import.id
                 && let Some(source_item) = self.crate_data.index.get(source_id)
             {
-                let module = extract_item!(source_item, ItemEnum::Module);
                 let mut output = String::new();
-                for item_id in &module.items {
-                    if let Some(item) = self.crate_data.index.get(item_id)
-                        && self.is_visible(item)
-                    {
-                        output.push_str(&self.render_item(path_prefix, item, true));
+
+                // Handle glob imports from modules (pub use module::*)
+                if matches!(source_item.inner, ItemEnum::Module(_)) {
+                    let module = extract_item!(source_item, ItemEnum::Module);
+                    for item_id in &module.items {
+                        if let Some(item) = self.crate_data.index.get(item_id)
+                            && self.is_visible(item)
+                        {
+                            output.push_str(&self.render_item(path_prefix, item, true));
+                        }
                     }
+                    return output;
                 }
-                return output;
+
+                // Handle glob imports from enums (pub use Enum::*)
+                if matches!(source_item.inner, ItemEnum::Enum(_)) {
+                    let enum_ = extract_item!(source_item, ItemEnum::Enum);
+                    for variant_id in &enum_.variants {
+                        if let Some(variant) = self.crate_data.index.get(variant_id)
+                            && self.is_visible(variant)
+                        {
+                            output.push_str(&self.render_item(path_prefix, variant, true));
+                        }
+                    }
+                    return output;
+                }
+
+                // For other types, fall through to render as-is
             }
             // If we can't resolve the glob import, fall back to rendering it as-is
             return format!("pub use {}::*;\n", escape_path(&import.source));
