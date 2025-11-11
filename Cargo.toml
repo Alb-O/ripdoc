@@ -14,6 +14,7 @@ missing_docs = "warn"
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+exclude = ["xtask"]
 
 [workspace.dependencies]
 libruskel = { version = "0.0.11", path = "crates/libruskel" }
