@@ -3,7 +3,7 @@ use std::{
     env, fs,
     io::{self, Write},
     path::{Component, Path, PathBuf, absolute},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use cargo::{core::Workspace, ops, util::context::GlobalContext};
@@ -15,12 +15,30 @@ use tempfile::TempDir;
 use super::target::{Entrypoint, Target};
 use crate::error::{Result, RuskelError, convert_cargo_error};
 
+/// Check if rustup is available on the system
+fn is_rustup_available() -> bool {
+    Command::new("rustup")
+        .arg("--version")
+        .stderr(Stdio::null())
+        .stdout(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 /// Get the sysroot path for the nightly toolchain
 fn get_sysroot() -> Result<PathBuf> {
-    let output = Command::new("rustc")
-        .args(["+nightly", "--print", "sysroot"])
-        .output()
-        .map_err(|e| RuskelError::Generate(format!("Failed to get sysroot: {e}")))?;
+    let output = if is_rustup_available() {
+        Command::new("rustc")
+            .args(["+nightly", "--print", "sysroot"])
+            .output()
+            .map_err(|e| RuskelError::Generate(format!("Failed to get sysroot: {e}")))?
+    } else {
+        Command::new("rustc")
+            .args(["--print", "sysroot"])
+            .output()
+            .map_err(|e| RuskelError::Generate(format!("Failed to get sysroot: {e}")))?
+    };
 
     if !output.status.success() {
         return Err(RuskelError::Generate(
@@ -256,8 +274,14 @@ impl CargoPath {
         let mut captured_stdout = Vec::new();
         let mut captured_stderr = Vec::new();
 
-        let build_result = rustdoc_json::Builder::default()
-            .toolchain("nightly")
+        let mut builder = rustdoc_json::Builder::default();
+
+        // Only set toolchain if rustup is available
+        if is_rustup_available() {
+            builder = builder.toolchain("nightly");
+        }
+
+        let build_result = builder
             .manifest_path(manifest_path)
             .document_private_items(private_items)
             .no_default_features(no_default_features)
@@ -280,8 +304,13 @@ impl CargoPath {
             build_result.map_err(|err| map_rustdoc_build_error(&err, &captured_stderr, silent))?;
         let json_content = fs::read_to_string(&json_path)?;
         let crate_data: Crate = serde_json::from_str(&json_content).map_err(|e| {
+            let update_msg = if is_rustup_available() {
+                "try running 'rustup update nightly'"
+            } else {
+                "try updating your nightly Rust toolchain"
+            };
             RuskelError::Generate(format!(
-                "Failed to parse rustdoc JSON, which may indicate an outdated nightly toolchain - try running 'rustup update nightly':\nError: {e}"
+                "Failed to parse rustdoc JSON, which may indicate an outdated nightly toolchain - {update_msg}:\nError: {e}"
             ))
         })?;
         Ok(crate_data)
@@ -783,9 +812,13 @@ fn map_rustdoc_build_error(
             }
 
             if err_msg.contains("toolchain") && err_msg.contains("is not installed") {
+                let install_msg = if is_rustup_available() {
+                    "run 'rustup toolchain install nightly'"
+                } else {
+                    "ensure nightly Rust is installed and available in PATH"
+                };
                 return RuskelError::Generate(
-                    "ruskel requires the nightly toolchain to be installed - run 'rustup toolchain install nightly'"
-                        .to_string(),
+                    format!("ruskel requires the nightly toolchain to be installed - {install_msg}")
                 );
             }
 

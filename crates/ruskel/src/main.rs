@@ -179,35 +179,64 @@ struct Cli {
 
 /// Ensure the nightly toolchain and rust-docs JSON component are present.
 fn check_nightly_toolchain() -> Result<(), String> {
-    // Check if nightly toolchain is installed
-    let output = Command::new("rustup")
-        .args(["run", "nightly", "rustc", "--version"])
+    // First, check if rustup is available
+    let rustup_available = Command::new("rustup")
+        .arg("--version")
         .stderr(Stdio::null())
-        .output()
-        .map_err(|e| format!("Failed to run rustup: {e}"))?;
+        .stdout(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
 
-    if !output.status.success() {
-        return Err("ruskel requires the nightly toolchain to be installed.\nRun: rustup toolchain install nightly".to_string());
-    }
+    if rustup_available {
+        // Check if nightly toolchain is installed via rustup
+        let output = Command::new("rustup")
+            .args(["run", "nightly", "rustc", "--version"])
+            .stderr(Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to run rustup: {e}"))?;
 
-    // Check if rust-docs-json component is available (for std library support)
-    let components_output = Command::new("rustup")
-        .args(["component", "list", "--toolchain", "nightly"])
-        .stderr(Stdio::null())
-        .output()
-        .map_err(|e| format!("Failed to check nightly components: {e}"))?;
+        if !output.status.success() {
+            return Err("ruskel requires the nightly toolchain to be installed.\nRun: rustup toolchain install nightly".to_string());
+        }
 
-    if components_output.status.success() {
-        let components_str = String::from_utf8_lossy(&components_output.stdout);
-        let has_rust_docs_json = components_str
-            .lines()
-            .any(|line| line.starts_with("rust-docs-json") && line.contains("(installed)"));
+        // Check if rust-docs-json component is available (for std library support)
+        let components_output = Command::new("rustup")
+            .args(["component", "list", "--toolchain", "nightly"])
+            .stderr(Stdio::null())
+            .output()
+            .map_err(|e| format!("Failed to check nightly components: {e}"))?;
 
-        if !has_rust_docs_json {
-            eprintln!(
-                "Warning: rust-docs-json component not installed. Standard library documentation will not be available."
-            );
-            eprintln!("To install: rustup component add rust-docs-json --toolchain nightly");
+        if components_output.status.success() {
+            let components_str = String::from_utf8_lossy(&components_output.stdout);
+            let has_rust_docs_json = components_str
+                .lines()
+                .any(|line| line.starts_with("rust-docs-json") && line.contains("(installed)"));
+
+            if !has_rust_docs_json {
+                eprintln!(
+                    "Warning: rust-docs-json component not installed. Standard library documentation will not be available."
+                );
+                eprintln!("To install: rustup component add rust-docs-json --toolchain nightly");
+            }
+        }
+    } else {
+        // rustup is not available - check for nightly rustc directly
+        let output = Command::new("rustc")
+            .arg("--version")
+            .output()
+            .map_err(|e| format!("Failed to run rustc: {e}\nEnsure nightly Rust is installed and available in PATH."))?;
+
+        if !output.status.success() {
+            return Err("ruskel requires a nightly Rust toolchain.\nEnsure nightly Rust is installed and available in PATH.".to_string());
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+        if !version_str.contains("nightly") {
+            return Err(format!(
+                "ruskel requires a nightly Rust toolchain, but found: {}\nEnsure nightly Rust is installed and available in PATH.",
+                version_str.trim()
+            ));
         }
     }
 
