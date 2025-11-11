@@ -13,7 +13,7 @@
 //! You must have the nightly Rust toolchain installed to use (but not to install) Ruskel.
 
 /// Helper utilities for querying Cargo metadata and managing crate sources.
-mod cargoutils;
+pub mod cargo;
 /// Utilities for normalising rustdoc structures before rendering.
 mod crateutils;
 /// Error types exposed by the libruskel crate.

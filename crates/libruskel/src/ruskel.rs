@@ -1,6 +1,6 @@
 use rustdoc_types::Crate;
 
-use super::cargoutils::*;
+use super::cargo::*;
 use super::error::*;
 use super::render::*;
 use super::search::{
