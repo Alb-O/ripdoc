@@ -1,17 +1,17 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::{env, fs};
 
-use flate2::read::GzDecoder;
 use semver::Version;
-use tar::Archive;
+use ureq::http;
 
 use super::path::CargoPath;
 use crate::error::{Result, RuskelError};
 
 const CRATES_IO_API: &str = "https://crates.io/api/v1/crates";
 
-/// Download (or reuse a cached copy of) a crate from crates.io and expose it as a [`CargoPath`].
+/// Download (or reuse a cached) crate from crates.io and expose it as a [`CargoPath`].
 pub fn fetch_registry_crate(
 	name: &str,
 	version: Option<&Version>,
@@ -28,32 +28,39 @@ pub fn fetch_registry_crate(
 		fetch_latest_version(name)?
 	};
 
-	let cache_dir = registry_cache_dir()?.join(format!("{name}-{resolved_version}"));
-	let manifest_path = cache_dir.join("Cargo.toml");
-
-	if manifest_path.exists() {
-		return Ok(CargoPath::Path(cache_dir));
+	// Check if crate exists in cargo's cache
+	if let Some(cached_path) = find_in_cargo_cache(name, &resolved_version)? {
+		return Ok(CargoPath::Path(cached_path));
 	}
 
 	if offline {
 		return Err(RuskelError::Generate(format!(
 			"crate '{name}'@{resolved_version} is not cached locally for offline use. \
-             Run without --offline or use `cargo fetch {name}` first."
+             Run without --offline or use `cargo fetch` first."
 		)));
 	}
 
-	download_and_extract(name, &resolved_version, &cache_dir)?;
+	// Use cargo fetch to download the crate
+	fetch_with_cargo(name, &resolved_version)?;
 
-	Ok(CargoPath::Path(cache_dir))
+	// Find it in the cache (it should be there now)
+	find_in_cargo_cache(name, &resolved_version)?
+		.map(CargoPath::Path)
+		.ok_or_else(|| {
+			RuskelError::Generate(format!(
+				"Failed to locate '{name}'@{resolved_version} in cargo cache after download"
+			))
+		})
 }
 
 fn fetch_latest_version(name: &str) -> Result<String> {
 	let url = format!("{CRATES_IO_API}/{name}");
-	let response = request(&url, name)?;
+	let mut response = request(&url, name)?;
 
 	let mut body = String::new();
 	response
-		.into_reader()
+		.body_mut()
+		.as_reader()
 		.read_to_string(&mut body)
 		.map_err(|err| {
 			RuskelError::Generate(format!(
@@ -90,82 +97,92 @@ fn fetch_latest_version(name: &str) -> Result<String> {
 	Ok(chosen)
 }
 
-fn download_and_extract(name: &str, version: &str, destination: &Path) -> Result<()> {
-	let download_url = format!("{CRATES_IO_API}/{name}/{version}/download");
-	let response = request(&download_url, name)?;
+/// Find a crate in cargo's registry cache
+fn find_in_cargo_cache(name: &str, version: &str) -> Result<Option<PathBuf>> {
+	let cargo_home = get_cargo_home()?;
+	let registry_src = cargo_home.join("registry").join("src");
 
-	let mut archive_bytes = Vec::new();
-	let mut reader = response.into_reader();
-	reader.read_to_end(&mut archive_bytes).map_err(|err| {
-		RuskelError::Generate(format!("Failed to download crate '{name}': {err}"))
-	})?;
-
-	let parent = destination
-		.parent()
-		.ok_or_else(|| RuskelError::Generate("Invalid cache directory".to_string()))?;
-	fs::create_dir_all(parent)?;
-
-	let staging = tempfile::Builder::new()
-		.prefix("download-")
-		.tempdir_in(parent)
-		.map_err(|err| RuskelError::Generate(format!("Failed to create cache dir: {err}")))?;
-
-	let cursor = std::io::Cursor::new(archive_bytes);
-	let gz = GzDecoder::new(cursor);
-	let mut archive = Archive::new(gz);
-	archive.unpack(staging.path()).map_err(|err| {
-		RuskelError::Generate(format!("Failed to unpack crate '{name}'@{version}: {err}"))
-	})?;
-
-	let extracted = staging.path().join(format!("{name}-{version}"));
-	if !extracted.exists() {
-		return Err(RuskelError::Generate(format!(
-			"Downloaded archive for '{name}'@{version} did not contain expected directory"
-		)));
+	if !registry_src.exists() {
+		return Ok(None);
 	}
 
-	if let Err(err) = fs::rename(&extracted, destination) {
+	// Look for the crate in any of the registry source directories
+	// The directory name format is: index.crates.io-<hash>
+	for entry in fs::read_dir(&registry_src)? {
+		let entry = entry?;
+		let index_dir = entry.path();
+		if !index_dir.is_dir() {
+			continue;
+		}
+
+		let crate_dir = index_dir.join(format!("{name}-{version}"));
+		if crate_dir.exists() && crate_dir.join("Cargo.toml").exists() {
+			return Ok(Some(crate_dir));
+		}
+	}
+
+	Ok(None)
+}
+
+/// Use `cargo fetch` to download a crate into cargo's cache
+fn fetch_with_cargo(name: &str, version: &str) -> Result<()> {
+	// Create a temporary directory with a minimal Cargo.toml
+	let temp_dir = tempfile::tempdir()
+		.map_err(|err| RuskelError::Generate(format!("Failed to create temp directory: {err}")))?;
+
+	let manifest_path = temp_dir.path().join("Cargo.toml");
+	let manifest_content = format!(
+		r#"[package]
+name = "temp-fetch"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+{name} = "={version}"
+"#
+	);
+
+	fs::write(&manifest_path, manifest_content)
+		.map_err(|err| RuskelError::Generate(format!("Failed to write temp Cargo.toml: {err}")))?;
+
+	// Run cargo fetch
+	let output = Command::new("cargo")
+		.arg("fetch")
+		.arg("--manifest-path")
+		.arg(&manifest_path)
+		.output()
+		.map_err(|err| RuskelError::Generate(format!("Failed to run cargo fetch: {err}")))?;
+
+	if !output.status.success() {
+		let stderr = String::from_utf8_lossy(&output.stderr);
 		return Err(RuskelError::Generate(format!(
-			"Failed to move crate '{name}' into cache: {err}"
+			"cargo fetch failed for '{name}'@{version}: {stderr}"
 		)));
 	}
 
 	Ok(())
 }
 
-fn registry_cache_dir() -> Result<PathBuf> {
-	let mut base = env::var_os("RUSKEL_CACHE_DIR").map(PathBuf::from);
-	if base.is_none() {
-		if let Some(xdg) = env::var_os("XDG_CACHE_HOME") {
-			base = Some(Path::new(&xdg).join("ruskel"));
-		} else if let Some(local) = env::var_os("LOCALAPPDATA") {
-			base = Some(Path::new(&local).join("ruskel"));
-		} else if let Some(home) = env::var_os("HOME") {
-			base = Some(Path::new(&home).join(".cache").join("ruskel"));
-		}
+fn get_cargo_home() -> Result<PathBuf> {
+	if let Some(cargo_home) = env::var_os("CARGO_HOME") {
+		return Ok(PathBuf::from(cargo_home));
+	}
+	if let Some(home) = env::var_os("HOME") {
+		return Ok(Path::new(&home).join(".cargo"));
 	}
 
-	let base = base.unwrap_or_else(|| env::temp_dir().join("ruskel-cache"));
-	let registry = base.join("registry");
-	fs::create_dir_all(&registry).map_err(|err| {
-		RuskelError::Generate(format!(
-			"Failed to create registry cache directory '{}': {err}",
-			registry.display()
-		))
-	})?;
-	Ok(registry)
+	Err(RuskelError::Generate(
+		"Could not determine CARGO_HOME directory".to_string(),
+	))
 }
 
-fn request(url: &str, crate_name: &str) -> Result<ureq::Response> {
-	match ureq::get(url).call() {
-		Ok(resp) => Ok(resp),
-		Err(ureq::Error::Status(404, _)) => {
-			Err(RuskelError::ModuleNotFound(crate_name.to_string()))
-		}
-		Err(err) => Err(RuskelError::Generate(format!(
+fn request(url: &str, crate_name: &str) -> Result<http::Response<ureq::Body>> {
+	ureq::get(url).call().map_err(|err| match err {
+		ureq::Error::StatusCode(404) => RuskelError::ModuleNotFound(crate_name.to_string()),
+		err => RuskelError::Generate(format!(
 			"Failed to reach crates.io for '{crate_name}': {err}"
-		))),
-	}
+		)),
+	})
 }
 
 #[cfg(test)]
@@ -182,16 +199,29 @@ mod tests {
 	}
 
 	#[test]
-	fn cache_dir_uses_env_override() -> Result<()> {
-		let tmp = tempfile::tempdir()?;
+	fn get_cargo_home_respects_env() {
+		let original = env::var_os("CARGO_HOME");
+		let tmp = tempfile::tempdir().unwrap();
+
 		unsafe {
-			env::set_var("RUSKEL_CACHE_DIR", tmp.path());
+			env::set_var("CARGO_HOME", tmp.path());
 		}
-		let dir = registry_cache_dir()?;
-		assert!(dir.starts_with(tmp.path()));
+
+		let cargo_home = get_cargo_home().unwrap();
+		assert_eq!(cargo_home, tmp.path());
+
 		unsafe {
-			env::remove_var("RUSKEL_CACHE_DIR");
+			if let Some(original) = original {
+				env::set_var("CARGO_HOME", original);
+			} else {
+				env::remove_var("CARGO_HOME");
+			}
 		}
-		Ok(())
+	}
+
+	#[test]
+	fn find_in_cache_returns_none_when_not_found() {
+		let result = find_in_cargo_cache("nonexistent-crate-xyz", "99.99.99").unwrap();
+		assert!(result.is_none());
 	}
 }
