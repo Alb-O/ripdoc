@@ -1,3 +1,0 @@
-[alias]
-# xtask - run custom build tasks
-xtask = "run --manifest-path xtask/Cargo.toml --"
