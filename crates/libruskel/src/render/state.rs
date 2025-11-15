@@ -1,10 +1,9 @@
-use rustdoc_types::{Crate, Id, Item};
 use rust_format::Formatter;
+use rustdoc_types::{Crate, Id, Item};
 
+use super::core::{RenderSelection, Renderer};
+use super::utils::{FilterMatch, must_get, ppush};
 use crate::error::{Result, RuskelError};
-
-use super::core::{Renderer, RenderSelection};
-use super::utils::{FilterMatch, ppush, must_get};
 
 /// Mutable rendering context shared across helper functions.
 pub struct RenderState<'a, 'b> {
@@ -31,7 +30,12 @@ impl<'a, 'b> RenderState<'a, 'b> {
 		use super::items::render_item;
 
 		// The root item is always a module
-		let output = render_item(self, "", must_get(self.crate_data, &self.crate_data.root), false);
+		let output = render_item(
+			self,
+			"",
+			must_get(self.crate_data, &self.crate_data.root),
+			false,
+		);
 
 		if !self.config.filter.is_empty() && !self.filter_matched {
 			return Err(RuskelError::FilterNotMatched(self.config.filter.clone()));

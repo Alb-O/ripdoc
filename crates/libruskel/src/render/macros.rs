@@ -2,8 +2,8 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use rustdoc_types::{Item, ItemEnum, MacroKind};
 
-use crate::keywords::is_reserved_word;
 use crate::crateutils::*;
+use crate::keywords::is_reserved_word;
 
 /// Reusable pattern for removing placeholder bodies from macro output.
 static MACRO_PLACEHOLDER_REGEX: Lazy<Regex> =

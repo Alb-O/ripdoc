@@ -1,6 +1,7 @@
 pub use self::config::{create_quiet_cargo_config, is_rustup_available};
-pub use self::manifest::{generate_dummy_manifest, to_import_name};
-pub use self::path::{CargoPath, create_dummy_crate};
+pub use self::manifest::to_import_name;
+pub use self::path::CargoPath;
+pub use self::registry::fetch_registry_crate;
 pub use self::resolved_target::{ResolvedTarget, resolve_target};
 pub use self::rustdoc_error::map_rustdoc_build_error;
 
@@ -10,6 +11,8 @@ pub mod config;
 pub mod manifest;
 /// CargoPath type and cargo crate path resolution.
 pub mod path;
+/// Downloading crates from crates.io into a local cache.
+pub mod registry;
 /// Target resolution to ResolvedTarget type.
 pub mod resolved_target;
 /// Rustdoc error handling and diagnostics extraction.

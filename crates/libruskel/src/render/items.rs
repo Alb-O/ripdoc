@@ -1,14 +1,18 @@
 use rustdoc_types::{Item, ItemEnum, StructKind, VariantKind, Visibility};
 
+use super::impls::{DERIVE_TRAITS, render_impl, should_render_impl};
+use super::macros::{render_macro, render_proc_macro};
+use super::state::RenderState;
+use super::utils::{must_get, ppush};
 use crate::crateutils::*;
 
-use super::state::RenderState;
-use super::utils::{ppush, must_get};
-use super::impls::{render_impl, should_render_impl, DERIVE_TRAITS};
-use super::macros::{render_macro, render_proc_macro};
-
 /// Render an item into Rust source text.
-pub fn render_item(state: &mut RenderState, path_prefix: &str, item: &Item, force_private: bool) -> String {
+pub fn render_item(
+	state: &mut RenderState,
+	path_prefix: &str,
+	item: &Item,
+	force_private: bool,
+) -> String {
 	if !state.selection_context_contains(&item.id) {
 		return String::new();
 	}
@@ -180,7 +184,11 @@ pub fn render_struct(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 }
 
 /// Render a struct field, optionally forcing visibility.
-pub fn render_struct_field(state: &RenderState, field_id: &rustdoc_types::Id, force: bool) -> String {
+pub fn render_struct_field(
+	state: &RenderState,
+	field_id: &rustdoc_types::Id,
+	force: bool,
+) -> String {
 	let field_item = must_get(state.crate_data, field_id);
 
 	if state.selection().is_some() && !force && !state.selection_context_contains(field_id) {
@@ -250,9 +258,7 @@ pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 	));
 
 	for variant_id in &enum_.variants {
-		if !selection_active
-			|| include_all_variants
-			|| state.selection_context_contains(variant_id)
+		if !selection_active || include_all_variants || state.selection_context_contains(variant_id)
 		{
 			let variant_item = must_get(state.crate_data, variant_id);
 			let include_variant_fields = include_all_variants
@@ -303,7 +309,8 @@ pub fn render_enum_variant(state: &RenderState, item: &Item, include_all_fields:
 				.filter_map(|field| {
 					field.as_ref().and_then(|id| {
 						if selection_active
-							&& !include_all_fields && !state.selection_context_contains(id)
+							&& !include_all_fields
+							&& !state.selection_context_contains(id)
 						{
 							return None;
 						}
@@ -323,7 +330,8 @@ pub fn render_enum_variant(state: &RenderState, item: &Item, include_all_fields:
 					|| include_all_fields
 					|| state.selection_context_contains(field)
 				{
-					let rendered = render_struct_field(state, field, include_all_fields || !selection_active);
+					let rendered =
+						render_struct_field(state, field, include_all_fields || !selection_active);
 					if !rendered.is_empty() {
 						output.push_str(&rendered);
 					}

@@ -5,7 +5,8 @@ use rustdoc_types::Crate;
 use semver::Version;
 
 use super::manifest::to_import_name;
-use super::path::{CargoPath, create_dummy_crate};
+use super::path::CargoPath;
+use super::registry::fetch_registry_crate;
 use crate::error::{Result, RuskelError};
 use crate::target::{Entrypoint, Target};
 
@@ -99,6 +100,10 @@ impl ResolvedTarget {
 				}
 			}
 			Entrypoint::Name { name, version } => {
+				if let Some(version) = version {
+					return Self::from_registry_crate(&name, Some(&version), &target.path, offline);
+				}
+
 				let current_dir = env::current_dir()?;
 				match CargoPath::nearest_manifest(&current_dir) {
 					Some(root) => {
@@ -110,10 +115,10 @@ impl ResolvedTarget {
 						if let Some(dependency) = root.find_dependency(&name, offline)? {
 							Ok(Self::new(dependency, &target.path))
 						} else {
-							Self::from_dummy_crate(&name, version, &target.path, offline)
+							Self::from_registry_crate(&name, None, &target.path, offline)
 						}
 					}
-					None => Self::from_dummy_crate(&name, version, &target.path, offline),
+					None => Self::from_registry_crate(&name, None, &target.path, offline),
 				}
 			}
 		}
@@ -169,42 +174,15 @@ impl ResolvedTarget {
 		Ok(Self::new(cargo_path, &components))
 	}
 
-	/// Create a resolved target backed by a temporary crate for registry dependencies.
-	fn from_dummy_crate(
+	/// Create a resolved target backed by a cached download from crates.io.
+	fn from_registry_crate(
 		name: &str,
-		version: Option<Version>,
+		version: Option<&Version>,
 		path: &[String],
 		offline: bool,
 	) -> Result<Self> {
-		let version_str = version.map(|v| v.to_string());
-		let dummy = create_dummy_crate(name, version_str, None)?;
-
-		match dummy.find_dependency(name, offline) {
-			Ok(Some(dependency_path)) => Ok(Self::new(dependency_path, path)),
-			Ok(None) => Err(RuskelError::ModuleNotFound(format!(
-				"Dependency '{name}' not found in dummy crate"
-			))),
-			Err(err) => {
-				if offline {
-					match err {
-						RuskelError::DependencyNotFound => Err(RuskelError::Generate(format!(
-							"crate '{name}' is not cached locally for offline use. Run 'cargo fetch {name}' without --offline first or retry without --offline."
-						))),
-						RuskelError::CargoError(message)
-							if message.contains("--offline")
-								|| message.contains("offline mode") =>
-						{
-							Err(RuskelError::Generate(format!(
-								"crate '{name}' is unavailable in offline mode: {message}"
-							)))
-						}
-						other => Err(other),
-					}
-				} else {
-					Err(err)
-				}
-			}
-		}
+		let cargo_path = fetch_registry_crate(name, version, offline)?;
+		Ok(Self::new(cargo_path, path))
 	}
 }
 
@@ -216,25 +194,23 @@ pub fn resolve_target(target_str: &str, offline: bool) -> Result<ResolvedTarget>
 
 	match &target.entrypoint {
 		Entrypoint::Path(_) => ResolvedTarget::from_target(target, offline),
-		Entrypoint::Name { name, version } => {
-			if version.is_some() {
-				// If a version is specified, always create a dummy package
-				ResolvedTarget::from_dummy_crate(name, version.clone(), &target.path, offline)
-			} else {
-				let resolved = ResolvedTarget::from_target(target.clone(), offline)?;
-				if !resolved.filter.is_empty() {
-					let first_component = resolved.filter.split("::").next().unwrap().to_string();
-					if let Some(cp) = resolved
-						.package_path
-						.find_dependency(&first_component, offline)?
-					{
-						Ok(ResolvedTarget::new(cp, &target.path))
-					} else {
-						Ok(resolved)
-					}
+		Entrypoint::Name {
+			name: _,
+			version: _,
+		} => {
+			let resolved = ResolvedTarget::from_target(target.clone(), offline)?;
+			if !resolved.filter.is_empty() {
+				let first_component = resolved.filter.split("::").next().unwrap().to_string();
+				if let Some(cp) = resolved
+					.package_path
+					.find_dependency(&first_component, offline)?
+				{
+					Ok(ResolvedTarget::new(cp, &target.path))
 				} else {
 					Ok(resolved)
 				}
+			} else {
+				Ok(resolved)
 			}
 		}
 	}

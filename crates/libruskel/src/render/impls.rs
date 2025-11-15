@@ -1,9 +1,8 @@
 use rustdoc_types::{Impl, Item, ItemEnum, Type, Visibility};
 
-use crate::crateutils::*;
-
 use super::state::RenderState;
 use super::utils::ppush;
+use crate::crateutils::*;
 
 /// Traits that we render via `#[derive(...)]` annotations instead of explicit impl blocks.
 pub const DERIVE_TRAITS: &[&str] = &[
@@ -58,8 +57,7 @@ pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 		Type::ResolvedPath(path) => state.selection_expands(&path.id),
 		_ => false,
 	};
-	let expand_children =
-		!selection_active || state.selection_expands(&item.id) || parent_expanded;
+	let expand_children = !selection_active || state.selection_expands(&item.id) || parent_expanded;
 
 	if let Some(trait_) = &impl_.trait_
 		&& let Some(trait_item) = state.crate_data.index.get(&trait_.id)
@@ -100,9 +98,7 @@ pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 	for item_id in &impl_.items {
 		if let Some(item) = state.crate_data.index.get(item_id) {
 			let is_trait_impl = impl_.trait_.is_some();
-			if (!selection_active
-				|| expand_children
-				|| state.selection_context_contains(item_id))
+			if (!selection_active || expand_children || state.selection_context_contains(item_id))
 				&& (is_trait_impl || is_visible(state, item))
 			{
 				let rendered = render_impl_item(state, &path_prefix, item, expand_children);
@@ -124,7 +120,12 @@ pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 }
 
 /// Render the item inside an impl block.
-pub fn render_impl_item(state: &mut RenderState, path_prefix: &str, item: &Item, include_all: bool) -> String {
+pub fn render_impl_item(
+	state: &mut RenderState,
+	path_prefix: &str,
+	item: &Item,
+	include_all: bool,
+) -> String {
 	if !include_all && !state.selection_context_contains(&item.id) {
 		return String::new();
 	}

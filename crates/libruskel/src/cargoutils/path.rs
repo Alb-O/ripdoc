@@ -9,7 +9,6 @@ use rustdoc_types::Crate;
 use tempfile::TempDir;
 
 use super::config::create_quiet_cargo_config;
-use super::manifest::generate_dummy_manifest;
 use crate::error::{Result, RuskelError, convert_cargo_error};
 
 /// A path to a crate. This can be a directory on the filesystem or a temporary directory.
@@ -258,66 +257,11 @@ impl CargoPath {
 	}
 }
 
-/// Materialize a temporary crate on disk to fetch metadata for a dependency.
-pub fn create_dummy_crate(
-	dependency: &str,
-	version: Option<String>,
-	features: Option<&[&str]>,
-) -> Result<CargoPath> {
-	let temp_dir = TempDir::new()?;
-	let path = temp_dir.path();
-
-	let manifest_path = path.join("Cargo.toml");
-	let src_dir = path.join("src");
-	fs::create_dir_all(&src_dir)?;
-
-	let lib_rs = src_dir.join("lib.rs");
-	let mut file = fs::File::create(lib_rs)?;
-	writeln!(file, "// Dummy crate")?;
-
-	let manifest = generate_dummy_manifest(dependency, version, features);
-	fs::write(manifest_path, manifest)?;
-
-	Ok(CargoPath::TempDir(temp_dir))
-}
-
 #[cfg(test)]
 mod tests {
 	use tempfile::tempdir;
 
 	use super::*;
-
-	#[test]
-	fn test_create_dummy_crate() -> Result<()> {
-		let cargo_path = create_dummy_crate("serde", None, None)?;
-		let path = cargo_path.as_path();
-
-		assert!(path.join("Cargo.toml").exists());
-
-		let manifest_content = fs::read_to_string(path.join("Cargo.toml"))?;
-		assert!(manifest_content.contains("[dependencies]"));
-		assert!(manifest_content.contains("serde = { version = \"*\""));
-
-		Ok(())
-	}
-
-	#[test]
-	fn test_create_dummy_crate_with_features() -> Result<()> {
-		let cargo_path = create_dummy_crate("serde", Some("1.0".to_string()), Some(&["derive"]))?;
-		let path = cargo_path.as_path();
-
-		assert!(path.join("Cargo.toml").exists());
-
-		let manifest_content = fs::read_to_string(path.join("Cargo.toml"))?;
-
-		// Validate that the manifest contains the expected content
-		assert!(manifest_content.contains("[dependencies]"));
-		assert!(
-			manifest_content.contains("serde = { version = \"1.0\", features = [\"derive\"] }")
-		);
-
-		Ok(())
-	}
 
 	#[test]
 	fn test_is_workspace() -> Result<()> {

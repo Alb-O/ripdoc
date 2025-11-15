@@ -16,5 +16,4 @@ pub mod state;
 pub mod utils;
 
 // Re-export public API
-pub use core::{Renderer, RenderSelection};
-
+pub use core::{RenderSelection, Renderer};
