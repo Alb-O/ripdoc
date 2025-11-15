@@ -33,10 +33,6 @@ pub fn map_rustdoc_build_error(
 			if stderr_str.contains("unknown feature") || stderr_str.contains("E0635") {
 				return RuskelError::Generate(format!(
 					"Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n\
-                    This typically happens when old crates use nightly features that have been renamed, stabilized, or removed.\n\
-                    \nPossible solutions:\n\
-                    1. Try updating your nightly toolchain (or use an older version)\n\
-                    2. The crate maintainers may need to update their dependencies\n\
                     \nOriginal error: {err_msg}"
 				));
 			}
@@ -58,12 +54,7 @@ fn format_rustdoc_failure(captured_stderr: &[u8], silent: bool) -> RuskelError {
 	// Check for nightly feature compatibility issues
 	if stderr_trimmed.contains("unknown feature") || stderr_trimmed.contains("E0635") {
 		return RuskelError::Generate(
-            "Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n\
-            This typically happens when old crates use nightly features that have been renamed, stabilized, or removed.\n\
-            \nPossible solutions:\n\
-            1. Try with a different nightly toolchain version\n\
-            2. The crate maintainers may need to update their dependencies\n\
-            \nNote: Some older crates may not be compatible with recent nightly versions.".to_string()
+            "Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n".to_string()
         );
 	}
 

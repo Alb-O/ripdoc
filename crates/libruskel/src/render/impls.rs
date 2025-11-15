@@ -28,7 +28,7 @@ pub const DERIVE_TRAITS: &[&str] = &[
 ];
 
 /// Determine whether an impl block should be rendered in the output.
-pub fn should_render_impl(impl_: &Impl, render_auto_impls: bool, render_blanket_impls: bool) -> bool {
+pub fn should_render_impl(impl_: &Impl, render_auto_impls: bool) -> bool {
 	if impl_.is_synthetic && !render_auto_impls {
 		return false;
 	}
@@ -37,8 +37,7 @@ pub fn should_render_impl(impl_: &Impl, render_auto_impls: bool, render_blanket_
 		return false;
 	}
 
-	let is_blanket = impl_.blanket_impl.is_some();
-	if is_blanket && !render_blanket_impls {
+	if impl_.blanket_impl.is_some() {
 		return false;
 	}
 

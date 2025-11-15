@@ -169,7 +169,7 @@ pub fn render_struct(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 	for impl_id in &struct_.impls {
 		let impl_item = must_get(state.crate_data, impl_id);
 		let impl_ = extract_item!(impl_item, ItemEnum::Impl);
-		if should_render_impl(impl_, state.config.render_auto_impls, state.config.render_blanket_impls)
+		if should_render_impl(impl_, state.config.render_auto_impls)
 			&& state.selection_allows_child(&item.id, impl_id)
 		{
 			output.push_str(&render_impl(state, path_prefix, impl_item));
@@ -271,7 +271,7 @@ pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 	for impl_id in &enum_.impls {
 		let impl_item = must_get(state.crate_data, impl_id);
 		let impl_ = extract_item!(impl_item, ItemEnum::Impl);
-		if should_render_impl(impl_, state.config.render_auto_impls, state.config.render_blanket_impls)
+		if should_render_impl(impl_, state.config.render_auto_impls)
 			&& state.selection_allows_child(&item.id, impl_id)
 		{
 			output.push_str(&render_impl(state, path_prefix, impl_item));

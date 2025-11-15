@@ -53,8 +53,6 @@ pub struct Renderer {
 	pub render_auto_impls: bool,
 	/// Whether private items should be rendered.
 	pub render_private_items: bool,
-	/// Whether blanket implementations (with generics over `T`) should be rendered.
-	pub render_blanket_impls: bool,
 	/// Filter path relative to the crate root.
 	pub filter: String,
 	/// Optional selection restricting which items are rendered.
@@ -75,7 +73,6 @@ impl Renderer {
 			formatter: RustFmt::from_config(config),
 			render_auto_impls: false,
 			render_private_items: false,
-			render_blanket_impls: false,
 			filter: String::new(),
 			selection: None,
 		}
@@ -87,13 +84,7 @@ impl Renderer {
 		self
 	}
 
-	/// Render impl blocks for traits implemented for all types?
-	pub fn with_blanket_impls(mut self, render_blanket_impls: bool) -> Self {
-		self.render_blanket_impls = render_blanket_impls;
-		self
-	}
-
-	/// Render impl blocks for auto traits like Send and Sync?
+	/// Render auto-implemented traits like `Send` and `Sync`.
 	pub fn with_auto_impls(mut self, render_auto_impls: bool) -> Self {
 		self.render_auto_impls = render_auto_impls;
 		self
