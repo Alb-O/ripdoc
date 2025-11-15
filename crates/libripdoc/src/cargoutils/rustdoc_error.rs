@@ -1,15 +1,15 @@
 use super::config::is_rustup_available;
-use crate::error::RuskelError;
+use crate::error::RipdocError;
 
 /// Maximum number of characters from rustdoc stderr included in failure reports.
 const MAX_STDERR_CHARS: usize = 8_192;
 
-/// Translate a `rustdoc_json` build failure into a user-facing [`RuskelError`].
+/// Translate a `rustdoc_json` build failure into a user-facing [`RipdocError`].
 pub fn map_rustdoc_build_error(
 	err: &rustdoc_json::BuildError,
 	captured_stderr: &[u8],
 	silent: bool,
-) -> RuskelError {
+) -> RipdocError {
 	match err {
 		rustdoc_json::BuildError::BuildRustdocJsonError => {
 			format_rustdoc_failure(captured_stderr, silent)
@@ -24,14 +24,14 @@ pub fn map_rustdoc_build_error(
 				} else {
 					"ensure nightly Rust is installed and available in PATH"
 				};
-				return RuskelError::Generate(format!(
-					"ruskel requires the nightly toolchain to be installed - {install_msg}"
+				return RipdocError::Generate(format!(
+					"ripdoc requires the nightly toolchain to be installed - {install_msg}"
 				));
 			}
 
 			// Check for nightly feature compatibility issues
 			if stderr_str.contains("unknown feature") || stderr_str.contains("E0635") {
-				return RuskelError::Generate(format!(
+				return RipdocError::Generate(format!(
 					"Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n\
                     \nOriginal error: {err_msg}"
 				));
@@ -41,19 +41,19 @@ pub fn map_rustdoc_build_error(
 				return format_rustdoc_failure(captured_stderr, silent);
 			}
 
-			RuskelError::Generate(format!("Failed to build rustdoc JSON: {err_msg}"))
+			RipdocError::Generate(format!("Failed to build rustdoc JSON: {err_msg}"))
 		}
 	}
 }
 
 /// Format a detailed error for rustdoc build failures, optionally embedding diagnostics.
-fn format_rustdoc_failure(captured_stderr: &[u8], silent: bool) -> RuskelError {
+fn format_rustdoc_failure(captured_stderr: &[u8], silent: bool) -> RipdocError {
 	let stderr_raw = String::from_utf8_lossy(captured_stderr).into_owned();
 	let stderr_trimmed = stderr_raw.trim();
 
 	// Check for nightly feature compatibility issues
 	if stderr_trimmed.contains("unknown feature") || stderr_trimmed.contains("E0635") {
-		return RuskelError::Generate(
+		return RipdocError::Generate(
             "Failed to build rustdoc JSON: This crate or its dependencies use unstable features that are not compatible with your current nightly toolchain.\n".to_string()
         );
 	}
@@ -65,7 +65,7 @@ fn format_rustdoc_failure(captured_stderr: &[u8], silent: bool) -> RuskelError {
 
 	if silent {
 		if stderr_trimmed.is_empty() {
-			return RuskelError::Generate(
+			return RipdocError::Generate(
                 "Failed to build rustdoc JSON: rustdoc exited with an error but emitted no diagnostics. \
                  Re-run with --verbose or `cargo rustdoc` to inspect the failure.".to_string(),
             );
@@ -78,10 +78,10 @@ fn format_rustdoc_failure(captured_stderr: &[u8], silent: bool) -> RuskelError {
 		if truncated {
 			message.push_str("\n… output truncated …");
 		}
-		return RuskelError::Generate(message);
+		return RipdocError::Generate(message);
 	}
 
-	RuskelError::Generate(format!("Failed to build rustdoc JSON: {summary}"))
+	RipdocError::Generate(format!("Failed to build rustdoc JSON: {summary}"))
 }
 
 /// Extract the first meaningful rustdoc diagnostic from the captured stderr stream.

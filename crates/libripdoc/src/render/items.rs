@@ -570,10 +570,12 @@ fn resolve_glob_use(state: &RenderState, import: &rustdoc_types::Use) -> UseReso
 }
 
 fn resolve_alias_use(import: &rustdoc_types::Use) -> UseResolution {
+	use crate::is_reserved_word;
+	
 	let source = escape_path(&import.source);
 	let last_segment = import.source.split("::").last().unwrap_or(&import.source);
 	if import.name != last_segment {
-		let escaped_name = if crate::keywords::is_reserved_word(import.name.as_str()) {
+		let escaped_name = if is_reserved_word(import.name.as_str()) {
 			format!("r#{}", import.name)
 		} else {
 			import.name.clone()

@@ -3,7 +3,7 @@ use rustdoc_types::{Crate, Id, Item};
 
 use super::core::{RenderSelection, Renderer};
 use super::utils::{FilterMatch, must_get, ppush};
-use crate::error::{Result, RuskelError};
+use crate::error::{Result, RipdocError};
 
 /// Mutable rendering context shared across helper functions.
 pub struct RenderState<'a, 'b> {
@@ -38,7 +38,7 @@ impl<'a, 'b> RenderState<'a, 'b> {
 		);
 
 		if !self.config.filter.is_empty() && !self.filter_matched {
-			return Err(RuskelError::FilterNotMatched(self.config.filter.clone()));
+			return Err(RipdocError::FilterNotMatched(self.config.filter.clone()));
 		}
 
 		Ok(self.config.formatter.format_str(&output)?)

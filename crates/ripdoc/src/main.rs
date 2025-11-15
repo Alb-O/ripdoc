@@ -1,10 +1,10 @@
-//! Command-line interface for the `ruskel` API skeleton generator.
+//! Command-line interface for the `ripdoc` API skeleton generator.
 
 use std::error::Error;
 use std::process::{self, Command, Stdio};
 
 use clap::{Parser, ValueEnum};
-use libruskel::{Ruskel, SearchDomain, SearchOptions};
+use libripdoc::{Ripdoc, SearchDomain, SearchOptions};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 /// Available search domains accepted by `--search-spec`.
@@ -32,7 +32,7 @@ impl From<SearchSpec> for SearchDomain {
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
-/// Parsed command-line options for the ruskel CLI.
+/// Parsed command-line options for the ripdoc CLI.
 struct Cli {
 	/// Target to generate - a directory, file path, or a module name
 	#[arg(default_value = "./")]
@@ -117,7 +117,7 @@ fn check_nightly_toolchain() -> Result<(), String> {
 			.map_err(|e| format!("Failed to run rustup: {e}"))?;
 
 		if !output.status.success() {
-			return Err("ruskel requires the nightly toolchain to be installed.\nRun: rustup toolchain install nightly".to_string());
+			return Err("ripdoc requires the nightly toolchain to be installed.\nRun: rustup toolchain install nightly".to_string());
 		}
 	} else {
 		// rustup is not available - check for nightly rustc directly
@@ -131,13 +131,13 @@ fn check_nightly_toolchain() -> Result<(), String> {
 			})?;
 
 		if !output.status.success() {
-			return Err("ruskel requires a nightly Rust toolchain.\nEnsure nightly Rust is installed and available in PATH.".to_string());
+			return Err("ripdoc requires a nightly Rust toolchain.\nEnsure nightly Rust is installed and available in PATH.".to_string());
 		}
 
 		let version_str = String::from_utf8_lossy(&output.stdout);
 		if !version_str.contains("nightly") {
 			return Err(format!(
-				"ruskel requires a nightly Rust toolchain, but found: {}\nEnsure nightly Rust is installed and available in PATH.",
+				"ripdoc requires a nightly Rust toolchain, but found: {}\nEnsure nightly Rust is installed and available in PATH.",
 				version_str.trim()
 			));
 		}
@@ -148,7 +148,7 @@ fn check_nightly_toolchain() -> Result<(), String> {
 
 /// Render a skeleton locally and stream it to stdout or a pager.
 fn run_cmdline(cli: &Cli) -> Result<(), Box<dyn Error>> {
-	let rs = Ruskel::new()
+	let rs = Ripdoc::new()
 		.with_offline(cli.offline)
 		.with_auto_impls(cli.auto_impls)
 		.with_silent(!cli.verbose);
@@ -209,7 +209,7 @@ fn build_search_options(cli: &Cli, query: &str) -> SearchOptions {
 }
 
 /// Execute the list flow and print a structured item summary.
-fn run_list(cli: &Cli, rs: &Ruskel) -> Result<(), Box<dyn Error>> {
+fn run_list(cli: &Cli, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
 	if cli.raw {
 		return Err("--raw cannot be combined with --list".into());
 	}
@@ -271,7 +271,7 @@ fn run_list(cli: &Cli, rs: &Ruskel) -> Result<(), Box<dyn Error>> {
 }
 
 /// Execute the search flow and print the filtered skeleton to stdout.
-fn run_search(cli: &Cli, rs: &Ruskel, query: &str) -> Result<(), Box<dyn Error>> {
+fn run_search(cli: &Cli, rs: &Ripdoc, query: &str) -> Result<(), Box<dyn Error>> {
 	if cli.raw {
 		return Err("--raw cannot be combined with --search".into());
 	}

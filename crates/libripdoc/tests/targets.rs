@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use libruskel::{Result, Ruskel};
+use libripdoc::{Result, Ripdoc};
 use tempfile::tempdir;
 
 #[cfg(test)]
@@ -33,8 +33,8 @@ mod tests {
 		)?;
 
 		let target = format!("{}::DummyStruct", foo_path.display());
-		let ruskel = Ruskel::new().with_silent(true);
-		let output = ruskel.render(&target, false, false, Vec::new(), false)?;
+		let ripdoc = Ripdoc::new().with_silent(true);
+		let output = ripdoc.render(&target, false, false, Vec::new(), false)?;
 
 		assert!(output.contains("pub struct DummyStruct;"));
 

@@ -1,7 +1,5 @@
 use rustdoc_types::{Item, ItemEnum, Visibility};
 
-use crate::keywords::is_reserved_word;
-
 /// Convenience macro to destructure `rustdoc_types::Item` variants during rendering.
 #[macro_export]
 macro_rules! extract_item {
@@ -42,6 +40,8 @@ pub fn render_vis(item: &Item) -> String {
 
 /// Render an item name, escaping Rust keywords when necessary.
 pub fn render_name(item: &Item) -> String {
+	use crate::is_reserved_word;
+
 	item.name.as_deref().map_or_else(
 		|| "?".to_string(),
 		|n| {

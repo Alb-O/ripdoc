@@ -1,4 +1,4 @@
-//! Utility helpers shared across integration tests for exercising Ruskel rendering.
+//! Utility helpers shared across integration tests for exercising Ripdoc rendering.
 
 #![allow(
 	dead_code,
@@ -7,7 +7,7 @@
 
 use std::fs;
 
-use libruskel::{Renderer, Ruskel};
+use libripdoc::{Renderer, Ripdoc};
 use pretty_assertions::assert_eq;
 use rust_format::{Formatter, RustFmt};
 use rustdoc_types::Crate;
@@ -96,8 +96,8 @@ pub fn create_test_crate(source: &str, is_proc_macro: bool) -> (TempDir, String)
 /// Compile the provided source into rustdoc JSON for assertions.
 pub fn inspect_crate(source: &str, private_items: bool, is_proc_macro: bool) -> Crate {
 	let (_temp_dir, target) = create_test_crate(source, is_proc_macro);
-	let ruskel = Ruskel::new().with_offline(true).with_silent(true);
-	ruskel
+	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
+	ripdoc
 		.inspect(&target, false, false, Vec::new(), private_items)
 		.unwrap()
 }

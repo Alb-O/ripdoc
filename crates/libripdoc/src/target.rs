@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use semver::Version;
 
-use crate::error::{Result, RuskelError};
+use crate::error::{Result, RipdocError};
 
 /// Entry point for resolving a target specification.
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +18,7 @@ pub enum Entrypoint {
 	},
 }
 
-/// A parsed target specification for the ruskel tool.
+/// A parsed target specification for the ripdoc tool.
 ///
 /// A target specification consists of an entrypoint and an optional path, separated by '::'.
 ///
@@ -77,7 +77,7 @@ impl Target {
 	/// Parse a target specification string into a structured `Target`.
 	pub fn parse(spec: &str) -> Result<Self> {
 		if spec.is_empty() {
-			return Err(RuskelError::InvalidTarget(
+			return Err(RipdocError::InvalidTarget(
 				"Invalid target specification: empty string".to_string(),
 			));
 		}
@@ -85,7 +85,7 @@ impl Target {
 		let parts: Vec<&str> = spec.split("::").collect();
 
 		if parts[0].is_empty() {
-			return Err(RuskelError::InvalidTarget(
+			return Err(RipdocError::InvalidTarget(
 				"Invalid name specification: empty name".to_string(),
 			));
 		}
@@ -95,7 +95,7 @@ impl Target {
 		// Check for empty path components
 		for (i, component) in path.iter().enumerate() {
 			if component.is_empty() {
-				return Err(RuskelError::InvalidTarget(format!(
+				return Err(RipdocError::InvalidTarget(format!(
 					"Invalid target specification: empty path component at position {}",
 					i + 1
 				)));
@@ -113,13 +113,13 @@ impl Target {
 			// It's a name with version
 			let name_parts: Vec<&str> = entrypoint.split('@').collect();
 			if name_parts.len() != 2 {
-				return Err(RuskelError::InvalidTarget(format!(
+				return Err(RipdocError::InvalidTarget(format!(
 					"Invalid name specification: {entrypoint}"
 				)));
 			}
 			let name = name_parts[0].to_string();
 			let version = Version::parse(name_parts[1])
-				.map_err(|e| RuskelError::InvalidTarget(format!("Invalid version: {e}")))?;
+				.map_err(|e| RipdocError::InvalidTarget(format!("Invalid version: {e}")))?;
 			Entrypoint::Name {
 				name,
 				version: Some(version),
@@ -149,14 +149,14 @@ mod tests {
 			// Empty target (invalid)
 			(
 				"",
-				Err(RuskelError::InvalidTarget(
+				Err(RipdocError::InvalidTarget(
 					"Invalid target specification: empty string".to_string(),
 				)),
 			),
 			// Double colon (::) should be treated as an error
 			(
 				"::",
-				Err(RuskelError::InvalidTarget(
+				Err(RipdocError::InvalidTarget(
 					"Invalid name specification: empty name".to_string(),
 				)),
 			),
@@ -294,29 +294,29 @@ mod tests {
 			// Invalid targets
 			(
 				"serde@",
-				Err(RuskelError::InvalidTarget("Invalid version: ".to_string())),
+				Err(RipdocError::InvalidTarget("Invalid version: ".to_string())),
 			),
 			(
 				"serde@invalid",
-				Err(RuskelError::InvalidTarget("Invalid version: ".to_string())),
+				Err(RipdocError::InvalidTarget("Invalid version: ".to_string())),
 			),
 			// Trailing :: should be an error
 			(
 				"foo::",
-				Err(RuskelError::InvalidTarget(
+				Err(RipdocError::InvalidTarget(
 					"Invalid target specification: empty path component at position 1".to_string(),
 				)),
 			),
 			(
 				"foo::bar::",
-				Err(RuskelError::InvalidTarget(
+				Err(RipdocError::InvalidTarget(
 					"Invalid target specification: empty path component at position 2".to_string(),
 				)),
 			),
 			// Multiple consecutive :: should also be errors
 			(
 				"foo::::bar",
-				Err(RuskelError::InvalidTarget(
+				Err(RipdocError::InvalidTarget(
 					"Invalid target specification: empty path component at position 1".to_string(),
 				)),
 			),

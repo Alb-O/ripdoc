@@ -7,7 +7,7 @@ use super::search::{
 	ListItem, SearchIndex, SearchItemKind, SearchOptions, SearchResponse, build_render_selection,
 };
 
-/// Ruskel generates a skeletonized version of a Rust crate in a single page.
+/// Ripdoc generates a skeletonized version of a Rust crate in a single page.
 /// It produces syntactically valid Rust code with all implementations omitted.
 ///
 /// The tool performs a 'cargo fetch' to ensure all referenced code is available locally,
@@ -15,8 +15,8 @@ use super::search::{
 /// is parsed and used to render the skeletonized code. Users must have the nightly
 /// Rust toolchain installed and available.
 #[derive(Debug, Clone)]
-pub struct Ruskel {
-	/// In offline mode Ruskel will not attempt to fetch dependencies from the network.
+pub struct Ripdoc {
+	/// In offline mode Ripdoc will not attempt to fetch dependencies from the network.
 	offline: bool,
 
 	/// Whether to render auto-implemented traits.
@@ -26,14 +26,14 @@ pub struct Ruskel {
 	silent: bool,
 }
 
-impl Default for Ruskel {
+impl Default for Ripdoc {
 	fn default() -> Self {
 		Self::new()
 	}
 }
 
-impl Ruskel {
-	/// Creates a new Ruskel instance with default configuration.
+impl Ripdoc {
+	/// Creates a new Ripdoc instance with default configuration.
 	///
 	/// # Target Format
 	///
@@ -70,7 +70,7 @@ impl Ruskel {
 		}
 	}
 
-	/// Enables or disables offline mode, which prevents Ruskel from fetching dependencies from the
+	/// Enables or disables offline mode, which prevents Ripdoc from fetching dependencies from the
 	/// network.
 	pub fn with_offline(mut self, offline: bool) -> Self {
 		self.offline = offline;

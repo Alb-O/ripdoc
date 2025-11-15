@@ -1,7 +1,5 @@
 use rustdoc_types::{Crate, Id, Item};
 
-use crate::keywords::is_reserved_word;
-
 /// Retrieve an item from the crate index, panicking if it is missing.
 pub fn must_get<'a>(crate_data: &'a Crate, id: &Id) -> &'a Item {
 	crate_data.index.get(id).unwrap()
@@ -18,6 +16,8 @@ pub fn ppush(path_prefix: &str, name: &str) -> String {
 
 /// Escape reserved keywords in a path by adding raw identifier prefixes when needed.
 pub fn escape_path(path: &str) -> String {
+	use crate::is_reserved_word;
+
 	path.split("::")
 		.map(|segment| {
 			// Some keywords like 'crate', 'self', 'super' cannot be raw identifiers

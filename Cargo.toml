@@ -1,10 +1,10 @@
 [workspace.package]
-version = "0.0.11"
+version = "0.1.0"
 edition = "2024"
-authors = ["Aldo Cortesi <aldo@corte.si>", "Albert O'Shea <albertoshea2@gmail.com>"]
-description = "Generates skeletonized outlines of Rust crates"
+authors = ["Albert O'Shea <albertoshea2@gmail.com>"]
+description = "Query and outline Rust documentation from the command line"
 license = "MIT"
-repository = "https://github.com/cortesi/ruskel"
+repository = "https://github.com/Alb-O/ripdoc"
 readme = "README.md"
 keywords = ["docs", "documentation", "outline", "cli"]
 
@@ -17,7 +17,7 @@ members = ["crates/*"]
 exclude = ["vendor/cargo-public-api", "vendor/cargo-manifest"]
 
 [workspace.dependencies]
-libruskel = { version = "0.0.11", path = "crates/libruskel" }
+libripdoc = { version = "0.1.0", path = "crates/libripdoc" }
 
 [patch.crates-io]
 rustdoc-json = { path = "vendor/cargo-public-api/rustdoc-json" }

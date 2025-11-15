@@ -1,5 +1,5 @@
 [package]
-name = "ruskel"
+name = "ripdoc"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -12,7 +12,7 @@ readme.workspace = true
 workspace = true
 
 [dependencies]
-libruskel = { workspace=true }
+libripdoc = { workspace=true }
 clap = { version = "4.5.51", features = ["derive"] }
 tokio = "1"
 

@@ -1,5 +1,5 @@
 {
-  description = " Ruskel generates skeletonized outlines of Rust crates.";
+  description = " Ripdoc generates skeletonized outlines of Rust crates.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

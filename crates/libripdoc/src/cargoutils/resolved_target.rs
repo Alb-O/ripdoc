@@ -7,7 +7,7 @@ use semver::Version;
 use super::manifest::to_import_name;
 use super::path::CargoPath;
 use super::registry::fetch_registry_crate;
-use crate::error::{Result, RuskelError};
+use crate::error::{Result, RipdocError};
 use crate::target::{Entrypoint, Target};
 
 /// A resolved Rust package or module target.
@@ -65,7 +65,7 @@ impl TargetResolution {
 						extra_path: target.path,
 					})
 				} else {
-					Err(RuskelError::InvalidTarget(format!(
+					Err(RipdocError::InvalidTarget(format!(
 						"Path '{}' is neither a package nor a workspace",
 						path.display()
 					)))
@@ -99,14 +99,14 @@ impl TargetResolution {
 					for package in packages {
 						error_msg.push_str(&format!("\n  - {package}"));
 					}
-					error_msg.push_str("\n\nUsage: ruskel <package-name>");
-					return Err(RuskelError::InvalidTarget(error_msg));
+					error_msg.push_str("\n\nUsage: ripdoc <package-name>");
+					return Err(RipdocError::InvalidTarget(error_msg));
 				}
 				let package_name = extra_path.remove(0);
 				if let Some(package) = workspace.find_workspace_package(&package_name)? {
 					Ok(ResolvedTarget::new(package.package_path, &extra_path))
 				} else {
-					Err(RuskelError::ModuleNotFound(format!(
+					Err(RipdocError::ModuleNotFound(format!(
 						"Package '{package_name}' not found in workspace"
 					)))
 				}
@@ -166,19 +166,19 @@ impl ResolvedTarget {
 		let file_path = fs::canonicalize(file_path)?;
 		let mut current_dir = file_path
 			.parent()
-			.ok_or_else(|| RuskelError::InvalidTarget("Invalid file path".to_string()))?
+			.ok_or_else(|| RipdocError::InvalidTarget("Invalid file path".to_string()))?
 			.to_path_buf();
 
 		// Find the nearest Cargo.toml
 		while !current_dir.join("Cargo.toml").exists() {
 			if !current_dir.pop() {
-				return Err(RuskelError::ManifestNotFound);
+				return Err(RipdocError::ManifestNotFound);
 			}
 		}
 
 		let cargo_path = CargoPath::Path(current_dir.clone());
 		let relative_path = file_path.strip_prefix(&current_dir).map_err(|_| {
-			RuskelError::InvalidTarget("Failed to determine relative path".to_string())
+			RipdocError::InvalidTarget("Failed to determine relative path".to_string())
 		})?;
 
 		// Convert the relative path to a module path

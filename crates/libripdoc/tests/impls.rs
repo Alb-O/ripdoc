@@ -1,6 +1,6 @@
 //! Integration tests for impl block rendering.
 mod utils;
-use libruskel::Renderer;
+use libripdoc::Renderer;
 use utils::*;
 
 gen_tests! {

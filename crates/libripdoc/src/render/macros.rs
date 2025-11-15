@@ -3,7 +3,6 @@ use regex::Regex;
 use rustdoc_types::{Item, ItemEnum, MacroKind};
 
 use crate::crateutils::*;
-use crate::keywords::is_reserved_word;
 
 /// Reusable pattern for removing placeholder bodies from macro output.
 static MACRO_PLACEHOLDER_REGEX: Lazy<Regex> =
@@ -11,6 +10,8 @@ static MACRO_PLACEHOLDER_REGEX: Lazy<Regex> =
 
 /// Render a macro_rules! definition.
 pub fn render_macro(item: &Item) -> String {
+	use crate::is_reserved_word;
+
 	let mut output = docs(item);
 
 	let macro_def = extract_item!(item, ItemEnum::Macro);

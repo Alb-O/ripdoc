@@ -6,7 +6,7 @@ use rustdoc_json::PackageTarget;
 use rustdoc_types::Crate;
 use tempfile::TempDir;
 
-use crate::error::{Result, RuskelError};
+use crate::error::{Result, RipdocError};
 
 /// A path to a crate. This can be a directory on the filesystem or a temporary directory.
 #[derive(Debug)]
@@ -43,7 +43,7 @@ impl CargoPath {
 		// Determine which target to document (lib or bin)
 		let manifest_content = fs::read_to_string(&manifest_path)?;
 		let manifest: cargo_toml::Manifest = cargo_toml::Manifest::from_str(&manifest_content)
-			.map_err(|e| RuskelError::ManifestParse(e.to_string()))?;
+			.map_err(|e| RipdocError::ManifestParse(e.to_string()))?;
 
 		let package_target = if manifest.lib.is_some() || self.as_path().join("src/lib.rs").exists()
 		{
@@ -113,7 +113,7 @@ impl CargoPath {
             } else {
                 "try updating your nightly Rust toolchain"
             };
-            RuskelError::Generate(format!(
+            RipdocError::Generate(format!(
                 "Failed to parse rustdoc JSON, which may indicate an outdated nightly toolchain - {update_msg}:\nError: {e}"
             ))
         })?;
@@ -125,7 +125,7 @@ impl CargoPath {
 		use std::path::absolute;
 		let manifest_path = self.as_path().join("Cargo.toml");
 		absolute(&manifest_path).map_err(|err| {
-			RuskelError::Generate(format!(
+			RipdocError::Generate(format!(
 				"Failed to resolve manifest path for '{}': {err}",
 				manifest_path.display()
 			))
@@ -149,7 +149,7 @@ impl CargoPath {
 		}
 		let manifest_path = self.manifest_path()?;
 		let manifest = cargo_toml::Manifest::from_path(&manifest_path)
-			.map_err(|err| RuskelError::ManifestParse(err.to_string()))?;
+			.map_err(|err| RipdocError::ManifestParse(err.to_string()))?;
 		Ok(manifest.workspace.is_some() && manifest.package.is_none())
 	}
 
@@ -160,7 +160,7 @@ impl CargoPath {
 		let metadata = cargo_metadata::MetadataCommand::new()
 			.manifest_path(&manifest_path)
 			.exec()
-			.map_err(|err| RuskelError::Generate(format!("Failed to get cargo metadata: {err}")))?;
+			.map_err(|err| RipdocError::Generate(format!("Failed to get cargo metadata: {err}")))?;
 
 		// Try both the provided name and its hyphenated/underscored version
 		let alt_dependency = if dependency.contains('_') {
@@ -223,7 +223,7 @@ impl CargoPath {
 		let metadata = cargo_metadata::MetadataCommand::new()
 			.manifest_path(&workspace_manifest_path)
 			.exec()
-			.map_err(|err| RuskelError::Generate(format!("Failed to get cargo metadata: {err}")))?;
+			.map_err(|err| RipdocError::Generate(format!("Failed to get cargo metadata: {err}")))?;
 
 		for package in metadata.workspace_packages() {
 			if package.name == module_name || package.name == alt_name {
@@ -244,7 +244,7 @@ impl CargoPath {
 		let metadata = cargo_metadata::MetadataCommand::new()
 			.manifest_path(&workspace_manifest_path)
 			.exec()
-			.map_err(|err| RuskelError::Generate(format!("Failed to get cargo metadata: {err}")))?;
+			.map_err(|err| RipdocError::Generate(format!("Failed to get cargo metadata: {err}")))?;
 
 		let mut packages: Vec<String> = metadata
 			.workspace_packages()

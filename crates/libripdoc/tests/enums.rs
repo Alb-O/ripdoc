@@ -1,6 +1,6 @@
 //! Integration tests validating enum rendering behaviour.
 mod utils;
-use libruskel::Renderer;
+use libripdoc::Renderer;
 use utils::*;
 
 gen_tests! {

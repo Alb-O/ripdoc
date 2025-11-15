@@ -1,6 +1,6 @@
 //! Integration tests asserting filter behaviour for rendered output.
 mod utils;
-use libruskel::Renderer;
+use libripdoc::Renderer;
 use utils::*;
 
 gen_tests! {

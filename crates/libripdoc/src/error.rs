@@ -2,12 +2,12 @@ use std::{io, result};
 
 use thiserror::Error;
 
-/// Convenience alias for results returned by libruskel operations.
-pub type Result<T> = result::Result<T, RuskelError>;
+/// Convenience alias for results returned by libripdoc operations.
+pub type Result<T> = result::Result<T, RipdocError>;
 
 /// Errors surfaced while generating rustdoc skeletons.
 #[derive(Error, Debug)]
-pub enum RuskelError {
+pub enum RipdocError {
 	/// Indicates that a specified module could not be found.
 	#[error("Module not found: {0}")]
 	ModuleNotFound(String),
@@ -57,13 +57,13 @@ pub enum RuskelError {
 	CargoError(String),
 }
 
-impl From<serde_json::Error> for RuskelError {
+impl From<serde_json::Error> for RipdocError {
 	fn from(err: serde_json::Error) -> Self {
 		Self::Generate(err.to_string())
 	}
 }
 
-impl From<rust_format::Error> for RuskelError {
+impl From<rust_format::Error> for RipdocError {
 	fn from(err: rust_format::Error) -> Self {
 		Self::Format(err.to_string())
 	}

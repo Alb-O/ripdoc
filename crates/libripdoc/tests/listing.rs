@@ -3,7 +3,7 @@
 
 mod utils;
 
-use libruskel::{Ruskel, SearchDomain, SearchItemKind, SearchOptions};
+use libripdoc::{Ripdoc, SearchDomain, SearchItemKind, SearchOptions};
 use pretty_assertions::assert_eq;
 use utils::create_test_crate;
 
@@ -20,9 +20,9 @@ fn list_respects_visibility_flags() {
     "#;
 
 	let (_temp_dir, target) = create_test_crate(source, false);
-	let ruskel = Ruskel::new().with_offline(true).with_silent(true);
+	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
 
-	let public_items = ruskel
+	let public_items = ripdoc
 		.list(&target, false, false, Vec::new(), false, None)
 		.unwrap();
 	let public_paths: Vec<String> = public_items.into_iter().map(|item| item.path).collect();
@@ -42,7 +42,7 @@ fn list_respects_visibility_flags() {
 			.any(|path| path.ends_with("PrivateWidget"))
 	);
 
-	let items_with_private = ruskel
+	let items_with_private = ripdoc
 		.list(&target, false, false, Vec::new(), true, None)
 		.unwrap();
 	let private_paths: Vec<String> = items_with_private
@@ -72,9 +72,9 @@ fn list_omits_nameless_use_items() {
     "#;
 
 	let (_temp_dir, target) = create_test_crate(source, false);
-	let ruskel = Ruskel::new().with_offline(true).with_silent(true);
+	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
 
-	let items = ruskel
+	let items = ripdoc
 		.list(&target, false, false, Vec::new(), false, None)
 		.unwrap();
 
@@ -95,13 +95,13 @@ fn list_applies_search_filters() {
     "#;
 
 	let (_temp_dir, target) = create_test_crate(source, false);
-	let ruskel = Ruskel::new().with_offline(true).with_silent(true);
+	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
 
 	let mut options = SearchOptions::new("widget");
 	options.domains = SearchDomain::NAMES;
 	options.include_private = false;
 
-	let filtered = ruskel
+	let filtered = ripdoc
 		.list(&target, false, false, Vec::new(), false, Some(&options))
 		.unwrap();
 

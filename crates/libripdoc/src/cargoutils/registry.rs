@@ -7,7 +7,7 @@ use semver::Version;
 use ureq::http;
 
 use super::path::CargoPath;
-use crate::error::{Result, RuskelError};
+use crate::error::{Result, RipdocError};
 
 const CRATES_IO_API: &str = "https://crates.io/api/v1/crates";
 
@@ -21,7 +21,7 @@ pub fn fetch_registry_crate(
 		version.to_string()
 	} else {
 		if offline {
-			return Err(RuskelError::Generate(format!(
+			return Err(RipdocError::Generate(format!(
 				"crate '{name}' requires an explicit version when running offline"
 			)));
 		}
@@ -34,7 +34,7 @@ pub fn fetch_registry_crate(
 	}
 
 	if offline {
-		return Err(RuskelError::Generate(format!(
+		return Err(RipdocError::Generate(format!(
 			"crate '{name}'@{resolved_version} is not cached locally for offline use. \
              Run without --offline or use `cargo fetch` first."
 		)));
@@ -47,7 +47,7 @@ pub fn fetch_registry_crate(
 	find_in_cargo_cache(name, &resolved_version)?
 		.map(CargoPath::Path)
 		.ok_or_else(|| {
-			RuskelError::Generate(format!(
+			RipdocError::Generate(format!(
 				"Failed to locate '{name}'@{resolved_version} in cargo cache after download"
 			))
 		})
@@ -63,13 +63,13 @@ fn fetch_latest_version(name: &str) -> Result<String> {
 		.as_reader()
 		.read_to_string(&mut body)
 		.map_err(|err| {
-			RuskelError::Generate(format!(
+			RipdocError::Generate(format!(
 				"Failed to read crates.io response for '{name}': {err}"
 			))
 		})?;
 
 	let value: serde_json::Value = serde_json::from_str(&body).map_err(|err| {
-		RuskelError::Generate(format!(
+		RipdocError::Generate(format!(
 			"Failed to parse crates.io metadata for '{name}': {err}"
 		))
 	})?;
@@ -78,7 +78,7 @@ fn fetch_latest_version(name: &str) -> Result<String> {
 		.get("crate")
 		.and_then(|v| v.as_object())
 		.ok_or_else(|| {
-			RuskelError::Generate(format!("Malformed crates.io response for '{name}'"))
+			RipdocError::Generate(format!("Malformed crates.io response for '{name}'"))
 		})?;
 
 	let max_stable = crate_info
@@ -89,7 +89,7 @@ fn fetch_latest_version(name: &str) -> Result<String> {
 		.get("max_version")
 		.and_then(|v| v.as_str())
 		.ok_or_else(|| {
-			RuskelError::Generate(format!("Missing max_version for '{name}' on crates.io"))
+			RipdocError::Generate(format!("Missing max_version for '{name}' on crates.io"))
 		})?;
 
 	let chosen = max_stable.unwrap_or(max_version).to_string();
@@ -128,7 +128,7 @@ fn find_in_cargo_cache(name: &str, version: &str) -> Result<Option<PathBuf>> {
 fn fetch_with_cargo(name: &str, version: &str) -> Result<()> {
 	// Create a temporary directory with a minimal Cargo.toml
 	let temp_dir = tempfile::tempdir()
-		.map_err(|err| RuskelError::Generate(format!("Failed to create temp directory: {err}")))?;
+		.map_err(|err| RipdocError::Generate(format!("Failed to create temp directory: {err}")))?;
 
 	let manifest_path = temp_dir.path().join("Cargo.toml");
 	let manifest_content = format!(
@@ -143,7 +143,7 @@ edition = "2021"
 	);
 
 	fs::write(&manifest_path, manifest_content)
-		.map_err(|err| RuskelError::Generate(format!("Failed to write temp Cargo.toml: {err}")))?;
+		.map_err(|err| RipdocError::Generate(format!("Failed to write temp Cargo.toml: {err}")))?;
 
 	// Run cargo fetch
 	let output = Command::new("cargo")
@@ -151,11 +151,11 @@ edition = "2021"
 		.arg("--manifest-path")
 		.arg(&manifest_path)
 		.output()
-		.map_err(|err| RuskelError::Generate(format!("Failed to run cargo fetch: {err}")))?;
+		.map_err(|err| RipdocError::Generate(format!("Failed to run cargo fetch: {err}")))?;
 
 	if !output.status.success() {
 		let stderr = String::from_utf8_lossy(&output.stderr);
-		return Err(RuskelError::Generate(format!(
+		return Err(RipdocError::Generate(format!(
 			"cargo fetch failed for '{name}'@{version}: {stderr}"
 		)));
 	}
@@ -171,15 +171,15 @@ fn get_cargo_home() -> Result<PathBuf> {
 		return Ok(Path::new(&home).join(".cargo"));
 	}
 
-	Err(RuskelError::Generate(
+	Err(RipdocError::Generate(
 		"Could not determine CARGO_HOME directory".to_string(),
 	))
 }
 
 fn request(url: &str, crate_name: &str) -> Result<http::Response<ureq::Body>> {
 	ureq::get(url).call().map_err(|err| match err {
-		ureq::Error::StatusCode(404) => RuskelError::ModuleNotFound(crate_name.to_string()),
-		err => RuskelError::Generate(format!(
+		ureq::Error::StatusCode(404) => RipdocError::ModuleNotFound(crate_name.to_string()),
+		err => RipdocError::Generate(format!(
 			"Failed to reach crates.io for '{crate_name}': {err}"
 		)),
 	})
