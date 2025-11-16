@@ -4,6 +4,7 @@ use std::error::Error;
 use std::process::{self, Command, Stdio};
 
 use clap::{Parser, ValueEnum};
+use owo_colors::OwoColorize;
 use ripdoc_core::{Ripdoc, SearchDomain, SearchOptions};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -286,6 +287,44 @@ fn run_list(cli: &Cli, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
+/// Highlight all occurrences of the search query in the output text with red color.
+fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
+	if query.is_empty() {
+		return text.to_string();
+	}
+
+	let mut result = String::with_capacity(text.len() * 2);
+	let search_text = if case_sensitive {
+		text.to_string()
+	} else {
+		text.to_lowercase()
+	};
+	let search_query = if case_sensitive {
+		query.to_string()
+	} else {
+		query.to_lowercase()
+	};
+
+	let mut last_end = 0;
+	let mut search_start = 0;
+
+	while let Some(pos) = search_text[search_start..].find(&search_query) {
+		let absolute_pos = search_start + pos;
+		// Add text before the match
+		result.push_str(&text[last_end..absolute_pos]);
+		// Add the highlighted match
+		let match_end = absolute_pos + query.len();
+		let matched_text = &text[absolute_pos..match_end];
+		result.push_str(&matched_text.to_string().red().to_string());
+		last_end = match_end;
+		search_start = match_end;
+	}
+
+	// Add remaining text
+	result.push_str(&text[last_end..]);
+	result
+}
+
 /// Execute the search flow and print the filtered skeleton to stdout.
 fn run_search(cli: &Cli, rs: &Ripdoc, query: &str) -> Result<(), Box<dyn Error>> {
 	if cli.raw {
@@ -313,7 +352,7 @@ fn run_search(cli: &Cli, rs: &Ripdoc, query: &str) -> Result<(), Box<dyn Error>>
 		return Ok(());
 	}
 
-	let output = response.rendered;
+	let output = highlight_matches(&response.rendered, trimmed, cli.search_case_sensitive);
 
 	print!("{}", output);
 

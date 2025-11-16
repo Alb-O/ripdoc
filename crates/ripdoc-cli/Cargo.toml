@@ -14,3 +14,4 @@ workspace = true
 [dependencies]
 ripdoc-core = { workspace = true }
 clap = { version = "4.5", features = ["derive"] }
+owo-colors = "4.2"
