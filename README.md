@@ -1,4 +1,4 @@
-# ripdoc
+# Ripdoc
 
 Ripdoc produces a syntactical outline of a crate's public API and documentation. The CLI provides on-demand access to these resources from any source (local filesystem or through [crates.io](https://crates.io)), perfect for AI agent usage.
 
@@ -33,40 +33,77 @@ trait      crate::io::AsyncRead
 
 Combine `--list` with `--search` to filter the catalog using the same domain controls as skeleton search. The listing honours `--private` and feature flags, and it conflicts with `--raw` because the output is tabular text rather than Rust code.
 
-````rust
-pub mod termsize {
-    //! Termsize is a tiny crate that provides a simple
-    //! interface for retrieving the current
-    //! [terminal interface](http://www.manpagez.com/man/4/tty/) size
-    //!
-    //! ```rust
-    //! extern crate termsize;
-    //!
-    //! termsize::get().map(|size| println!("rows {} cols {}", size.rows, size.cols));
-    //! ```
+Below is a small excerpt from the `pandoc` crate showing how Ripdoc renders the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
 
-    /// Container for number of rows and columns
-    #[derive(Debug)]
-    pub struct Size {
-        pub rows: u16,
-        pub cols: u16,
-    }
+### Markdown preview (default):
 
-    /// Gets the current terminal size
-    pub fn get() -> Option<self::super::Size> {}
-}
+````markdown
+```rust
+impl Pandoc {
+```
+
+Get a new Pandoc object This function returns a builder object to configure the Pandoc execution.
+
+```rust
+pub fn new() -> Pandoc {}
+```
+
+Add a path hint to search for the LaTeX executable.
+
+The supplied path is searched first for the latex executable, then the environment variable `PATH`, then some hard-coded location hints.
+
+```rust
+pub fn add_latex_path_hint<T: AsRef<Path> + ?Sized>(&mut self, path: &T) -> &mut Pandoc {}
+```
+
+Add a path hint to search for the Pandoc executable.
+
+The supplied path is searched first for the Pandoc executable, then the environment variable `PATH`, then some hard-coded location hints.
+
+```rust
+pub fn add_pandoc_path_hint<T: AsRef<Path> + ?Sized>(&mut self, path: &T) -> &mut Pandoc {}
+
+// Set or overwrite the document-class.
+pub fn set_doc_class(&mut self, class: DocumentClass) -> &mut Pandoc {}
+```
 ````
+
+### Rust preview (`--format rs`):
+
+```rust
+impl Pandoc {
+    /// Get a new Pandoc object
+    /// This function returns a builder object to configure the Pandoc
+    /// execution.
+    pub fn new() -> Pandoc {}
+
+    /// Add a path hint to search for the LaTeX executable.
+    ///
+    /// The supplied path is searched first for the latex executable, then the environment variable
+    /// `PATH`, then some hard-coded location hints.
+    pub fn add_latex_path_hint<T: AsRef<Path> + ?Sized>(&mut self, path: &T) -> &mut Pandoc {}
+
+    /// Add a path hint to search for the Pandoc executable.
+    ///
+    /// The supplied path is searched first for the Pandoc executable, then the environment variable `PATH`, then
+    /// some hard-coded location hints.
+    pub fn add_pandoc_path_hint<T: AsRef<Path> + ?Sized>(&mut self, path: &T) -> &mut Pandoc {}
+
+    /// Set or overwrite the document-class.
+    pub fn set_doc_class(&mut self, class: DocumentClass) -> &mut Pandoc {}
+```
+
+Ripdoc renders Markdown by default as it is more token efficient. The output is immediately usable for feeding to LLMs.
 
 ## Features
 
-- Generate a skeletonized view of any Rust crate
 - Support for both local crates and remote crates from crates.io
 - Filter output to matched items using `--search` with the `--search-spec` domain selector and `--direct-match-only` when you want to avoid container expansion
 - Generate tabular item listings with `--list`, optionally filtered by `--search`
-- Syntax highlighting for terminal output
-- Markdown-friendly output via `--format markdown`, which strips doc comment markers and wraps code in fenced blocks
+- Search match highlighting for terminal output
+- Markdown-friendly output, which strips doc markers and wraps code in fenced `rust` blocks (use `--format rs` for raw Rust output)
 - Optionally include private items and auto-implemented traits
-- Support for custom feature flags and version specification
+- Support for querying against feature flags and version specification
 
 ---
 
