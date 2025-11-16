@@ -270,11 +270,9 @@ fn name_domain_matches_impl_method() {
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
 	assert!(results.iter().any(|r| r.raw_name == "render"));
-	assert!(
-		results
-			.iter()
-			.all(|r| r.matched.contains(SearchDomain::NAMES))
-	);
+	assert!(results
+		.iter()
+		.all(|r| r.matched.contains(SearchDomain::NAMES)));
 }
 
 #[test]

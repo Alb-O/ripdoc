@@ -15,8 +15,8 @@ pub use ripdoc_render::Renderer;
 use rustdoc_types::Crate;
 
 pub use crate::error::Result;
+use crate::search::{build_render_selection, SearchIndex};
 pub use crate::search::{ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse};
-use crate::search::{SearchIndex, build_render_selection};
 
 /// Ripdoc generates a skeletonized version of a Rust crate in a single page.
 /// It produces syntactically valid Rust code with all implementations omitted.
@@ -35,6 +35,9 @@ pub struct Ripdoc {
 
 	/// Whether to suppress output during processing.
 	silent: bool,
+
+	/// Cache configuration for rustdoc JSON output.
+	cache_config: ripdoc_cargo::CacheConfig,
 }
 
 /// Check if the rendered output is essentially empty (just an empty module declaration).
@@ -90,6 +93,7 @@ impl Ripdoc {
 			offline: false,
 			auto_impls: false,
 			silent: false,
+			cache_config: ripdoc_cargo::CacheConfig::default(),
 		}
 	}
 
@@ -109,6 +113,18 @@ impl Ripdoc {
 	/// Enables or disables silent mode, which suppresses output during processing.
 	pub fn with_silent(mut self, silent: bool) -> Self {
 		self.silent = silent;
+		self
+	}
+
+	/// Enables or disables caching of rustdoc JSON output.
+	pub fn with_cache(mut self, enabled: bool) -> Self {
+		self.cache_config.enabled = enabled;
+		self
+	}
+
+	/// Sets a custom cache directory for storing rustdoc JSON output.
+	pub fn with_cache_dir(mut self, dir: std::path::PathBuf) -> Self {
+		self.cache_config = self.cache_config.with_cache_dir(dir);
 		self
 	}
 
@@ -135,6 +151,7 @@ impl Ripdoc {
 			features,
 			private_items,
 			self.silent,
+			&self.cache_config,
 		)?)
 	}
 
@@ -157,6 +174,7 @@ impl Ripdoc {
 			features,
 			options.include_private,
 			self.silent,
+			&self.cache_config,
 		)?;
 
 		let index = SearchIndex::build(&crate_data, options.include_private);
@@ -202,6 +220,7 @@ impl Ripdoc {
 			features,
 			include_private,
 			self.silent,
+			&self.cache_config,
 		)?;
 
 		let index = SearchIndex::build(&crate_data, include_private);
@@ -248,6 +267,7 @@ impl Ripdoc {
 			features.clone(),
 			private_items,
 			self.silent,
+			&self.cache_config,
 		)?;
 
 		let renderer = Renderer::default()
@@ -266,6 +286,7 @@ impl Ripdoc {
 				features,
 				true,
 				self.silent,
+				&self.cache_config,
 			)?;
 
 			let renderer_private = Renderer::default()

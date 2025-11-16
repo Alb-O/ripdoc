@@ -35,6 +35,7 @@ impl CargoPath {
 		features: Vec<String>,
 		private_items: bool,
 		silent: bool,
+		cache_config: &crate::cache::CacheConfig,
 	) -> Result<Crate> {
 		use std::io;
 
@@ -44,6 +45,30 @@ impl CargoPath {
 		let manifest_content = fs::read_to_string(&manifest_path)?;
 		let manifest: cargo_toml::Manifest = cargo_toml::Manifest::from_str(&manifest_content)
 			.map_err(|e| RipdocError::ManifestParse(e.to_string()))?;
+
+		// Build package info for cache key
+		let package_info = if let Some(ref package) = manifest.package {
+			format!("{}-{}", package.name, package.version())
+		} else {
+			// For virtual manifests or when package info is missing, use a default
+			"unknown-package".to_string()
+		};
+
+		// Try to load from cache
+		let toolchain_version = crate::cache::get_toolchain_version();
+		let cache_key = crate::cache::CacheKey::new(
+			manifest_path.clone(),
+			package_info.clone(),
+			no_default_features,
+			all_features,
+			features.clone(),
+			private_items,
+			toolchain_version,
+		);
+
+		if let Ok(Some(cached_crate)) = crate::cache::load_cached(cache_config, &cache_key) {
+			return Ok(cached_crate);
+		}
 
 		let package_target = if manifest.lib.is_some() || self.as_path().join("src/lib.rs").exists()
 		{
@@ -117,6 +142,10 @@ impl CargoPath {
                 "Failed to parse rustdoc JSON, which may indicate an outdated nightly toolchain - {update_msg}:\nError: {e}"
             ))
         })?;
+
+		// Save to cache (ignore errors - cache is best-effort)
+		let _ = crate::cache::save_cached(cache_config, &cache_key, &crate_data);
+
 		Ok(crate_data)
 	}
 

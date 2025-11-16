@@ -145,6 +145,7 @@ impl ResolvedTarget {
 		features: Vec<String>,
 		private_items: bool,
 		silent: bool,
+		cache_config: &crate::cache::CacheConfig,
 	) -> Result<Crate> {
 		self.package_path.read_crate(
 			no_default_features,
@@ -152,6 +153,7 @@ impl ResolvedTarget {
 			features,
 			private_items,
 			silent,
+			cache_config,
 		)
 	}
 
