@@ -32,6 +32,8 @@ pub mod impls;
 pub mod items;
 /// Procedural and declarative macro rendering.
 pub mod macros;
+/// Markdown conversion helpers.
+pub mod markdown;
 /// Signature rendering utilities for Rust items.
 pub mod signatures;
 /// Mutable rendering state and filtering.
