@@ -117,11 +117,13 @@ fn strip_doc_comment(line: &str) -> &str {
 fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bool {
 	let mut fence_open = false;
 	let mut contains_text = false;
+	let mut paragraph = String::new();
 
 	for (_, text) in doc_block {
 		let trimmed_end = text.trim_end();
 		let trimmed_start = trimmed_end.trim_start();
 		if trimmed_start.starts_with("```") {
+			flush_paragraph(markdown, &mut paragraph, &mut contains_text);
 			let lang = trimmed_start[3..].trim();
 			if let Some(mapped) = normalize_doc_lang(lang) {
 				if fence_open {
@@ -136,22 +138,22 @@ fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bo
 				markdown.push('\n');
 			}
 			fence_open = !fence_open;
-		} else {
-			let line_to_write = if fence_open {
-				unhide_doctest_line(trimmed_end)
-			} else {
-				Some(trimmed_start.to_string())
-			};
-			let Some(line_to_write) = line_to_write else {
-				continue;
-			};
-			if !line_to_write.is_empty() && !fence_open {
-				contains_text = true;
+		} else if fence_open {
+			if let Some(line_to_write) = unhide_doctest_line(trimmed_end) {
+				markdown.push_str(&line_to_write);
+				markdown.push('\n');
 			}
-			markdown.push_str(&line_to_write);
-			markdown.push('\n');
+		} else if trimmed_start.is_empty() {
+			flush_paragraph(markdown, &mut paragraph, &mut contains_text);
+		} else {
+			if !paragraph.is_empty() {
+				paragraph.push(' ');
+			}
+			paragraph.push_str(trimmed_start);
 		}
 	}
+
+	flush_paragraph(markdown, &mut paragraph, &mut contains_text);
 
 	if fence_open {
 		markdown.push_str("```\n\n");
@@ -213,6 +215,25 @@ fn dedent_lines(lines: &[String]) -> String {
 		}
 	}
 	result
+}
+
+fn flush_paragraph(markdown: &mut String, paragraph: &mut String, contains_text: &mut bool) {
+	let trimmed = paragraph.trim();
+	if trimmed.is_empty() {
+		paragraph.clear();
+		return;
+	}
+	if !markdown.is_empty() && !markdown.ends_with('\n') {
+		markdown.push('\n');
+	}
+	if !markdown.is_empty() {
+		markdown.push('\n');
+	}
+	markdown.push_str(trimmed);
+	markdown.push('\n');
+	markdown.push('\n');
+	*contains_text = true;
+	paragraph.clear();
 }
 
 fn unhide_doctest_line(line: &str) -> Option<String> {
