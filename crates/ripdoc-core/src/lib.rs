@@ -96,7 +96,7 @@ impl Ripdoc {
 			offline: false,
 			auto_impls: false,
 			silent: false,
-			render_format: RenderFormat::Rust,
+			render_format: RenderFormat::Markdown,
 			cache_config: ripdoc_cargo::CacheConfig::default(),
 		}
 	}
@@ -305,7 +305,7 @@ impl Ripdoc {
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)
 				.with_private_items(true)
-				.with_format(self.render_format);
+				.with_format(RenderFormat::Rust);
 
 			return Ok(renderer_private.render(&crate_data_private)?);
 		}

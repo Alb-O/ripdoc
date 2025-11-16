@@ -83,7 +83,7 @@ impl Renderer {
 		let config = Config::new_str().option("brace_style", "PreferSameLine");
 		Self {
 			formatter: RustFmt::from_config(config),
-			format: RenderFormat::Rust,
+			format: RenderFormat::Markdown,
 			render_auto_impls: false,
 			render_private_items: false,
 			filter: String::new(),

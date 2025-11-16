@@ -106,7 +106,7 @@ struct Cli {
 	cache_dir: Option<String>,
 
 	/// Select the render format (`rust` or `markdown`)
-	#[arg(long = "format", value_enum, default_value = "rust")]
+	#[arg(long = "format", value_enum, default_value = "markdown")]
 	format: OutputFormat,
 }
 
@@ -383,8 +383,10 @@ fn main() {
 /// Output formats the CLI can emit.
 enum OutputFormat {
 	/// Render formatted Rust code (default).
+	#[value(alias = "rs")]
 	Rust,
 	/// Emit Markdown with stripped documentation markers.
+	#[value(alias = "md")]
 	Markdown,
 }
 
