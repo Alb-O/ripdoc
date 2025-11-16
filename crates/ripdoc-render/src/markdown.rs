@@ -114,10 +114,43 @@ fn strip_doc_comment(line: &str) -> &str {
 	}
 }
 
+fn is_list_item(line: &str) -> bool {
+	let trimmed = line.trim_start();
+	if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+		return true;
+	}
+
+	let mut chars = trimmed.chars().peekable();
+	let mut saw_digit = false;
+	while matches!(chars.peek(), Some(c) if c.is_ascii_digit()) {
+		saw_digit = true;
+		chars.next();
+	}
+	if !saw_digit {
+		return false;
+	}
+
+	matches!(chars.next(), Some('.') | Some(')'))
+		&& matches!(chars.next(), Some(' ' | '\t'))
+}
+
+fn ensure_block_gap(markdown: &mut String) {
+	if markdown.is_empty() || markdown.ends_with("\n\n") {
+		return;
+	}
+	if markdown.ends_with('\n') {
+		markdown.push('\n');
+	} else {
+		markdown.push('\n');
+		markdown.push('\n');
+	}
+}
+
 fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bool {
 	let mut fence_open = false;
 	let mut contains_text = false;
 	let mut paragraph = String::new();
+	let mut in_list_block = false;
 
 	for (_, text) in doc_block {
 		let trimmed_end = text.trim_end();
@@ -138,6 +171,7 @@ fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bo
 				markdown.push('\n');
 			}
 			fence_open = !fence_open;
+			in_list_block = false;
 		} else if fence_open {
 			if let Some(line_to_write) = unhide_doctest_line(trimmed_end) {
 				markdown.push_str(&line_to_write);
@@ -145,7 +179,24 @@ fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bo
 			}
 		} else if trimmed_start.is_empty() {
 			flush_paragraph(markdown, &mut paragraph, &mut contains_text);
+			if in_list_block {
+				ensure_block_gap(markdown);
+				in_list_block = false;
+			}
+		} else if is_list_item(trimmed_start) {
+			flush_paragraph(markdown, &mut paragraph, &mut contains_text);
+			if !in_list_block {
+				ensure_block_gap(markdown);
+			}
+			markdown.push_str(trimmed_end);
+			markdown.push('\n');
+			in_list_block = true;
+			contains_text = true;
 		} else {
+			if in_list_block {
+				ensure_block_gap(markdown);
+				in_list_block = false;
+			}
 			if !paragraph.is_empty() {
 				paragraph.push(' ');
 			}
@@ -154,6 +205,10 @@ fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bo
 	}
 
 	flush_paragraph(markdown, &mut paragraph, &mut contains_text);
+
+	if in_list_block {
+		ensure_block_gap(markdown);
+	}
 
 	if fence_open {
 		markdown.push_str("```\n\n");
@@ -442,5 +497,30 @@ pub fn demo() {}
 ```"#;
 
 		assert_eq!(rust_to_markdown(source), expected);
+	}
+
+	#[test]
+	fn preserves_list_structure() {
+		let source = "\
+/// Shopping list
+/// - Apples
+/// - Bananas
+///
+/// Notes follow.
+pub struct Cart;
+";
+
+		let expected = r#"Shopping list
+
+- Apples
+- Bananas
+
+Notes follow.
+
+```rust
+pub struct Cart;
+```"#;
+
+		assert_eq!(rust_to_markdown(source), expected.trim());
 	}
 }
