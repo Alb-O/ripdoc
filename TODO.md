@@ -2,6 +2,7 @@
 
 Feel free to add more intermediate sub-tasks as needed.
 
+- [ ] organise into subcommands
 - [ ] functionality/subcommands for fetching:
   - [ ] examples
   - [ ] READMEs

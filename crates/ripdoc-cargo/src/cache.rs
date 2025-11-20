@@ -4,9 +4,9 @@
 //! expensive re-generation of documentation for the same crate.
 
 use std::collections::hash_map::DefaultHasher;
-use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use rustdoc_types::Crate;
 
@@ -55,6 +55,10 @@ impl CacheConfig {
 	fn get_cache_dir(&self) -> Result<PathBuf> {
 		if let Some(ref dir) = self.cache_dir {
 			return Ok(dir.clone());
+		}
+
+		if let Ok(dir) = env::var("RIPDOC_CACHE_DIR") {
+			return Ok(PathBuf::from(dir));
 		}
 
 		// Use platform-specific cache directory via the dirs crate

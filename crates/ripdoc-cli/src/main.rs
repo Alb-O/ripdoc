@@ -97,14 +97,6 @@ struct Cli {
 	#[arg(short = 'v', long, default_value_t = false)]
 	verbose: bool,
 
-	/// Disable caching of rustdoc JSON output
-	#[arg(long, default_value_t = false)]
-	no_cache: bool,
-
-	/// Custom directory for storing cached rustdoc JSON output
-	#[arg(long, value_name = "DIR")]
-	cache_dir: Option<String>,
-
 	/// Select the render format (`rust` or `markdown`)
 	#[arg(short = 'f', long, value_enum, default_value = "markdown")]
 	format: OutputFormat,
@@ -161,19 +153,11 @@ fn check_nightly_toolchain() -> Result<(), String> {
 
 /// Render a skeleton locally and stream it to stdout or a pager.
 fn run_cmdline(cli: &Cli) -> Result<(), Box<dyn Error>> {
-	let mut rs = Ripdoc::new()
+	let rs = Ripdoc::new()
 		.with_offline(cli.offline)
 		.with_auto_impls(cli.auto_impls)
 		.with_render_format(cli.format.into())
 		.with_silent(!cli.verbose);
-
-	// Configure caching
-	if cli.no_cache {
-		rs = rs.with_cache(false);
-	}
-	if let Some(ref cache_dir) = cli.cache_dir {
-		rs = rs.with_cache_dir(std::path::PathBuf::from(cache_dir));
-	}
 
 	if cli.list {
 		return run_list(cli, &rs);

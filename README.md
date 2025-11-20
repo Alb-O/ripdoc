@@ -104,6 +104,7 @@ Ripdoc renders Markdown by default as it is more token efficient. The output is 
 - Markdown-friendly output, which strips doc markers and wraps code in fenced `rust` blocks (use `--format rs` for raw Rust output)
 - Optionally include private items and auto-implemented traits
 - Support for querying against feature flags and version specification
+- Cache rustdoc JSON on disk automatically (override location via `RIPDOC_CACHE_DIR`)
 
 ---
 
