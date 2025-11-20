@@ -5,7 +5,7 @@ use std::process::{self, Command, Stdio};
 
 use clap::{Parser, ValueEnum};
 use owo_colors::OwoColorize;
-use ripdoc_core::{RenderFormat, Ripdoc, SearchDomain, SearchOptions};
+use ripdoc_core::{RenderFormat, Ripdoc, SearchDomain, SearchOptions, SourceLocation};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 /// Available search domains accepted by `--search-spec`.
@@ -272,24 +272,39 @@ fn run_list(cli: &Cli, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
 		.map(|entry| entry.kind.label().len())
 		.max()
 		.unwrap_or(0);
+	let path_width = listings
+		.iter()
+		.map(|entry| entry.path.len())
+		.max()
+		.unwrap_or(0);
 
 	let mut buffer = String::new();
 	for entry in listings {
 		let label = entry.kind.label();
-		if label_width > 0 {
-			buffer.push_str(&format!(
-				"{label:<width$} {}\n",
-				entry.path,
-				width = label_width
-			));
-		} else {
-			buffer.push_str(&format!("{label} {}\n", entry.path));
-		}
+		let location = format_source_location(entry.source.as_ref());
+		buffer.push_str(&format!(
+			"{label:<label_width$} {path:<path_width$} {location}\n",
+			path = entry.path
+		));
 	}
 
 	print!("{}", buffer);
 
 	Ok(())
+}
+
+/// Format a source location for display.
+fn format_source_location(source: Option<&SourceLocation>) -> String {
+	match source {
+		Some(location) => {
+			let mut rendered = location.path.clone();
+			if let Some(line) = location.line {
+				rendered.push_str(&format!(":{line}"));
+			}
+			rendered
+		}
+		None => "-".to_string(),
+	}
 }
 
 /// Highlight all occurrences of the search query in the output text with red color.

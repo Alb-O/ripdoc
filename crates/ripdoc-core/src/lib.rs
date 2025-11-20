@@ -15,7 +15,9 @@ pub use ripdoc_render::{RenderFormat, Renderer};
 use rustdoc_types::Crate;
 
 pub use crate::error::Result;
-pub use crate::search::{ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse};
+pub use crate::search::{
+	ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse, SourceLocation,
+};
 use crate::search::{SearchIndex, build_render_selection};
 
 /// Ripdoc generates a skeletonized version of a Rust crate in a single page.
@@ -187,7 +189,11 @@ impl Ripdoc {
 			&self.cache_config,
 		)?;
 
-		let index = SearchIndex::build(&crate_data, options.include_private);
+		let index = SearchIndex::build(
+			&crate_data,
+			options.include_private,
+			Some(rt.package_root()),
+		);
 		let results = index.search(options);
 
 		if results.is_empty() {
@@ -234,7 +240,7 @@ impl Ripdoc {
 			&self.cache_config,
 		)?;
 
-		let index = SearchIndex::build(&crate_data, include_private);
+		let index = SearchIndex::build(&crate_data, include_private, Some(rt.package_root()));
 
 		let mut results: Vec<ListItem> = if let Some(options) = search {
 			index
@@ -243,6 +249,7 @@ impl Ripdoc {
 				.map(|result| ListItem {
 					kind: result.kind,
 					path: result.path_string,
+					source: result.source,
 				})
 				.collect()
 		} else {
@@ -253,6 +260,7 @@ impl Ripdoc {
 				.map(|entry| ListItem {
 					kind: entry.kind,
 					path: entry.path_string,
+					source: entry.source,
 				})
 				.collect()
 		};

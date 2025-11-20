@@ -31,7 +31,7 @@ struct     crate::sync::Mutex
 trait      crate::io::AsyncRead
 ```
 
-Combine `--list` with `--search` to filter the catalog using the same domain controls as skeleton search. The listing honours `--private` and feature flags, and it conflicts with `--raw` because the output is tabular text rather than Rust code.
+Combine `--list` with `--search` to filter the catalog using the same domain controls as skeleton search. The listing honours `--private` and feature flags, and it conflicts with `--raw` because the output is tabular text rather than Rust code. Each row includes the source file and line.
 
 Below is a small excerpt from the `pandoc` crate showing how Ripdoc renders the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
 

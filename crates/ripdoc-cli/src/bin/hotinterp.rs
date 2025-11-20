@@ -198,10 +198,7 @@ impl HotLibrary {
 				lib.get::<unsafe extern "C" fn(*mut ScriptContext) -> i32>(b"hot_entry\0")?;
 			*symbol
 		};
-		Ok(Self {
-			_lib: lib,
-			entry,
-		})
+		Ok(Self { _lib: lib, entry })
 	}
 
 	unsafe fn call(&self, ctx: &mut ScriptContext) -> i32 {

@@ -157,6 +157,11 @@ impl ResolvedTarget {
 		)
 	}
 
+	/// Return the crate root on disk backing this target.
+	pub fn package_root(&self) -> &Path {
+		self.package_path.as_path()
+	}
+
 	/// Resolve a `Target` into a fully-qualified location and filter path.
 	pub fn from_target(target: Target, offline: bool) -> Result<Self> {
 		let resolution = TargetResolution::plan(target)?;

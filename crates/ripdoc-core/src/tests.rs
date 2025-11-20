@@ -260,7 +260,7 @@ fn fixture_crate() -> Crate {
 
 fn build_index() -> SearchIndex {
 	let crate_data = fixture_crate();
-	SearchIndex::build(&crate_data, false)
+	SearchIndex::build(&crate_data, false, None)
 }
 
 #[test]

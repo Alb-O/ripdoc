@@ -2,6 +2,7 @@
 #![allow(clippy::missing_docs_in_private_items)]
 
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use bitflags::bitflags;
 use ripdoc_render::{
@@ -166,6 +167,17 @@ pub struct SearchResponse {
 	pub rendered: String,
 }
 
+/// Source location associated with an item.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceLocation {
+	/// Absolute path to the source file when available.
+	pub path: String,
+	/// One-indexed line number where the item starts.
+	pub line: Option<usize>,
+	/// One-indexed column number where the item starts.
+	pub column: Option<usize>,
+}
+
 /// Lightweight record describing an item for list mode output.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListItem {
@@ -173,6 +185,8 @@ pub struct ListItem {
 	pub kind: SearchItemKind,
 	/// Canonical path rendered as a `::` separated string.
 	pub path: String,
+	/// Source location for the item if available.
+	pub source: Option<SourceLocation>,
 }
 
 /// Result of performing a query against a crate index.
@@ -194,6 +208,8 @@ pub struct SearchResult {
 	pub docs: Option<String>,
 	/// Rendered signature used for matching and display.
 	pub signature: Option<String>,
+	/// Source location for the item if available.
+	pub source: Option<SourceLocation>,
 	/// Ancestor chain of items that must be rendered for context.
 	pub ancestors: Vec<Id>,
 	/// Domains that produced a match (empty when stored in the index).
@@ -216,8 +232,8 @@ pub struct SearchIndex {
 
 impl SearchIndex {
 	/// Construct a new index by traversing the provided crate.
-	pub fn build(crate_data: &Crate, include_private: bool) -> Self {
-		let mut builder = IndexBuilder::new(crate_data, include_private);
+	pub fn build(crate_data: &Crate, include_private: bool, source_root: Option<&Path>) -> Self {
+		let mut builder = IndexBuilder::new(crate_data, include_private, source_root);
 		builder.traverse();
 		builder.finish()
 	}
@@ -309,16 +325,40 @@ struct ImplContext {
 struct IndexBuilder<'a> {
 	crate_data: &'a Crate,
 	include_private: bool,
+	source_root: Option<PathBuf>,
+	source_prefix: Option<String>,
 	stack: Vec<PathStackEntry>,
 	entries: Vec<SearchResult>,
 	visited: HashSet<Id>,
 }
 
 impl<'a> IndexBuilder<'a> {
-	fn new(crate_data: &'a Crate, include_private: bool) -> Self {
+	fn new(crate_data: &'a Crate, include_private: bool, source_root: Option<&Path>) -> Self {
+		let crate_name = crate_data
+			.index
+			.get(&crate_data.root)
+			.and_then(|root| root.name.clone());
+		let root_name = source_root
+			.and_then(Path::file_name)
+			.and_then(|os| os.to_str())
+			.map(str::to_string);
+		let source_prefix = match (root_name, crate_name.clone()) {
+			(Some(root), Some(crate_name)) => {
+				if root.starts_with(&format!("{crate_name}-")) {
+					Some(root)
+				} else {
+					Some(crate_name)
+				}
+			}
+			(None, Some(crate_name)) => Some(crate_name),
+			(Some(root), None) => Some(root),
+			(None, None) => None,
+		};
 		Self {
 			crate_data,
 			include_private,
+			source_root: source_root.map(PathBuf::from),
+			source_prefix,
 			stack: Vec::new(),
 			entries: Vec::new(),
 			visited: HashSet::new(),
@@ -754,6 +794,7 @@ impl<'a> IndexBuilder<'a> {
 		ancestors.extend(extra_ancestors.iter().copied());
 
 		let path_string = join_path(&path);
+		let source = self.resolve_source(item);
 		let signature = self.signature_for(item, kind);
 		let result = SearchResult {
 			item_id: item.id,
@@ -764,6 +805,7 @@ impl<'a> IndexBuilder<'a> {
 			display_name: segment.display_name.clone(),
 			docs: item.docs.clone(),
 			signature,
+			source,
 			ancestors,
 			matched: SearchDomain::empty(),
 		};
@@ -771,6 +813,66 @@ impl<'a> IndexBuilder<'a> {
 		self.entries.push(result);
 		true
 	}
+
+	fn resolve_source(&self, item: &Item) -> Option<SourceLocation> {
+		let span = item.span.as_ref()?;
+		let mut path = span.filename.clone();
+
+		if let Some(root) = &self.source_root {
+			if path.is_relative() {
+				path = root.join(path);
+			}
+		}
+
+		let absolute_path = match path.canonicalize() {
+			Ok(p) => p,
+			Err(_) => path,
+		};
+
+		let display_path = self
+			.source_root
+			.as_deref()
+			.and_then(|root| {
+				let rel = absolute_path.strip_prefix(root).ok()?;
+				let mut buf = PathBuf::new();
+				if let Some(name) = self.source_prefix.as_deref() {
+					buf.push(name);
+				}
+				buf.push(rel);
+				Some(buf)
+			})
+			.or_else(|| {
+				self.find_manifest_root(&absolute_path)
+					.and_then(|(manifest_root, root_name)| {
+						let rel = absolute_path.strip_prefix(&manifest_root).ok()?;
+						let mut buf = PathBuf::from(root_name);
+						buf.push(rel);
+						Some(buf)
+					})
+			})
+			.unwrap_or_else(|| absolute_path.clone());
+
+		Some(SourceLocation {
+			path: display_path.to_string_lossy().into_owned(),
+			line: Some(span.begin.0),
+			column: None,
+		})
+	}
+
+	fn find_manifest_root(&self, path: &Path) -> Option<(PathBuf, String)> {
+		for ancestor in path.ancestors() {
+			let manifest = ancestor.join("Cargo.toml");
+			if manifest.exists() {
+				let name = ancestor
+					.file_name()
+					.and_then(|os| os.to_str())
+					.map(str::to_string)?;
+				return Some((ancestor.to_path_buf(), name));
+			}
+		}
+		None
+	}
+
 	fn signature_for(&self, item: &Item, kind: SearchItemKind) -> Option<String> {
 		match (&item.inner, kind) {
 			(ItemEnum::Function(_), SearchItemKind::Function)

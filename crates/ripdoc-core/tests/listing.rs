@@ -118,3 +118,41 @@ fn list_applies_search_filters() {
 		)]
 	);
 }
+
+#[test]
+fn list_reports_source_paths() {
+	use std::path::Path;
+
+	let source = r#"
+        pub mod inner;
+
+        pub fn root() {}
+    "#;
+
+	let (temp_dir, target) = create_test_crate(source, false);
+	std::fs::write(temp_dir.path().join("src/inner.rs"), "pub fn nested() {}\n").unwrap();
+
+	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
+	let items = ripdoc
+		.list(&target, false, false, Vec::new(), false, None)
+		.unwrap();
+
+	let module_source = items
+		.iter()
+		.find(|item| item.path.ends_with("dummy_crate::inner"))
+		.and_then(|item| item.source.as_ref())
+		.expect("module source path");
+	assert!(!Path::new(&module_source.path).is_absolute());
+	assert!(module_source.path.starts_with("dummy_crate/"));
+	assert!(module_source.path.ends_with("src/inner.rs"));
+
+	let root_fn_source = items
+		.iter()
+		.find(|item| item.path.ends_with("dummy_crate::root"))
+		.and_then(|item| item.source.as_ref())
+		.expect("function source path");
+	assert!(!Path::new(&root_fn_source.path).is_absolute());
+	assert!(root_fn_source.path.starts_with("dummy_crate/"));
+	assert!(root_fn_source.path.ends_with("src/lib.rs"));
+	assert!(root_fn_source.line.is_some());
+}
