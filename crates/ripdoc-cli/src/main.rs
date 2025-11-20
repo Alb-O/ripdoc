@@ -1,9 +1,9 @@
 //! CLI entrypoint.
 
 use std::error::Error;
-use std::process::{self, Command, Stdio};
+use std::process::{self, Command as ProcessCommand, Stdio};
 
-use clap::{Parser, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use owo_colors::OwoColorize;
 use ripdoc_core::{RenderFormat, Ripdoc, SearchDomain, SearchOptions, SourceLocation};
 
@@ -31,44 +31,8 @@ impl From<SearchSpec> for SearchDomain {
 	}
 }
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-/// Parsed command-line options for the ripdoc CLI.
-struct Cli {
-	/// Target to generate - a directory, file path, or a module name
-	#[arg(default_value = "./")]
-	target: String,
-
-	/// Output raw JSON instead of rendered Rust code
-	#[arg(short = 'r', long, default_value_t = false)]
-	raw: bool,
-
-	/// Search query used to filter the generated skeleton instead of rendering everything.
-	#[arg(short = 's', long)]
-	search: Option<String>,
-
-	/// Output a structured item listing instead of rendered code.
-	#[arg(short = 'l', long, default_value_t = false, conflicts_with = "raw")]
-	list: bool,
-
-	/// Comma-separated list of search domains (name, doc, signature, path). Defaults to name, doc, signature.
-	#[arg(
-		long = "search-spec",
-		value_delimiter = ',',
-		value_name = "DOMAIN[,DOMAIN...]",
-		default_value = "name,doc,signature"
-	)]
-	#[arg(short = 'S')]
-	search_spec: Vec<SearchSpec>,
-
-	/// Execute the search in a case sensitive manner.
-	#[arg(short = 'c', long, default_value_t = false)]
-	search_case_sensitive: bool,
-
-	/// Suppress automatic expansion of matched containers when searching.
-	#[arg(short = 'd', long, default_value_t = false)]
-	direct_match_only: bool,
-
+#[derive(Args, Clone)]
+struct CommonArgs {
 	/// Render auto-implemented traits
 	#[arg(short = 'i', long, default_value_t = false)]
 	auto_impls: bool,
@@ -102,10 +66,104 @@ struct Cli {
 	format: OutputFormat,
 }
 
+#[derive(Args, Clone)]
+struct SearchFilterArgs {
+	/// Comma-separated list of search domains (name, doc, signature, path). Defaults to name, doc, signature.
+	#[arg(
+		long = "search-spec",
+		value_delimiter = ',',
+		value_name = "DOMAIN[,DOMAIN...]",
+		default_value = "name,doc,signature"
+	)]
+	#[arg(short = 'S')]
+	search_spec: Vec<SearchSpec>,
+
+	/// Execute the search in a case sensitive manner.
+	#[arg(short = 'c', long, default_value_t = false)]
+	search_case_sensitive: bool,
+
+	/// Suppress automatic expansion of matched containers when searching.
+	#[arg(short = 'd', long, default_value_t = false)]
+	direct_match_only: bool,
+}
+
+impl Default for SearchFilterArgs {
+	fn default() -> Self {
+		Self {
+			search_spec: vec![SearchSpec::Name, SearchSpec::Doc, SearchSpec::Signature],
+			search_case_sensitive: false,
+			direct_match_only: false,
+		}
+	}
+}
+
+#[derive(Args, Clone)]
+struct ListArgs {
+	/// Target to generate - a directory, file path, or a module name
+	#[arg(default_value = "./")]
+	target: String,
+
+	/// Optional search query used to filter the listing.
+	#[arg(short = 's', long)]
+	query: Option<String>,
+
+	#[command(flatten)]
+	filters: SearchFilterArgs,
+}
+
+#[derive(Args, Clone)]
+struct SearchArgs {
+	/// Target to generate - a directory, file path, or a module name
+	target: String,
+
+	/// Search query used to filter the generated skeleton instead of rendering everything.
+	#[arg(required = false)]
+	query: Option<String>,
+
+	#[command(flatten)]
+	filters: SearchFilterArgs,
+}
+
+#[derive(Args, Clone)]
+struct RenderArgs {
+	/// Target to generate - a directory, file path, or a module name
+	#[arg(default_value = "./")]
+	target: String,
+}
+
+#[derive(Subcommand, Clone)]
+enum Command {
+	/// Render a crate skeleton (default).
+	Render(RenderArgs),
+	/// Produce a structured item listing.
+	List(ListArgs),
+	/// Search for matching items and render the filtered skeleton.
+	Search(SearchArgs),
+	/// Emit raw rustdoc JSON.
+	Raw(RenderArgs),
+}
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+/// Parsed command-line options for the ripdoc CLI.
+struct Cli {
+	#[command(flatten)]
+	common: CommonArgs,
+
+	#[arg()]
+	legacy_target: Option<String>,
+
+	#[arg(trailing_var_arg = true, hide = true)]
+	legacy_extra: Vec<String>,
+
+	#[command(subcommand)]
+	command: Option<Command>,
+}
+
 /// Ensure the nightly toolchain and rust-docs JSON component are present.
 fn check_nightly_toolchain() -> Result<(), String> {
 	// First, check if rustup is available
-	let rustup_available = Command::new("rustup")
+	let rustup_available = ProcessCommand::new("rustup")
 		.arg("--version")
 		.stderr(Stdio::null())
 		.stdout(Stdio::null())
@@ -115,7 +173,7 @@ fn check_nightly_toolchain() -> Result<(), String> {
 
 	if rustup_available {
 		// Check if nightly toolchain is installed via rustup
-		let output = Command::new("rustup")
+		let output = ProcessCommand::new("rustup")
 			.args(["run", "nightly", "rustc", "--version"])
 			.stderr(Stdio::null())
 			.output()
@@ -126,7 +184,7 @@ fn check_nightly_toolchain() -> Result<(), String> {
 		}
 	} else {
 		// rustup is not available - check for nightly rustc directly
-		let output = Command::new("rustc")
+		let output = ProcessCommand::new("rustc")
 			.arg("--version")
 			.output()
 			.map_err(|e| {
@@ -151,51 +209,22 @@ fn check_nightly_toolchain() -> Result<(), String> {
 	Ok(())
 }
 
-/// Render a skeleton locally and stream it to stdout or a pager.
-fn run_cmdline(cli: &Cli) -> Result<(), Box<dyn Error>> {
-	let rs = Ripdoc::new()
-		.with_offline(cli.offline)
-		.with_auto_impls(cli.auto_impls)
-		.with_render_format(cli.format.into())
-		.with_silent(!cli.verbose);
-
-	if cli.list {
-		return run_list(cli, &rs);
-	}
-
-	if let Some(query) = cli.search.as_deref() {
-		return run_search(cli, &rs, query);
-	}
-
-	let output = if cli.raw {
-		rs.raw_json(
-			&cli.target,
-			cli.no_default_features,
-			cli.all_features,
-			cli.features.clone(),
-			cli.private,
-		)?
-	} else {
-		rs.render(
-			&cli.target,
-			cli.no_default_features,
-			cli.all_features,
-			cli.features.clone(),
-			cli.private,
-		)?
-	};
-
-	println!("{output}");
-
-	Ok(())
+/// Build a Ripdoc instance configured with common CLI knobs.
+fn build_ripdoc(common: &CommonArgs) -> Ripdoc {
+	Ripdoc::new()
+		.with_offline(common.offline)
+		.with_auto_impls(common.auto_impls)
+		.with_render_format(common.format.into())
+		.with_silent(!common.verbose)
 }
 
 /// Resolve the active search domains specified by the CLI flags.
-fn search_domains_from_cli(cli: &Cli) -> SearchDomain {
-	if cli.search_spec.is_empty() {
+fn search_domains_from_filters(filters: &SearchFilterArgs) -> SearchDomain {
+	if filters.search_spec.is_empty() {
 		SearchDomain::default()
 	} else {
-		cli.search_spec
+		filters
+			.search_spec
 			.iter()
 			.fold(SearchDomain::empty(), |mut acc, spec| {
 				acc |= SearchDomain::from(*spec);
@@ -205,40 +234,70 @@ fn search_domains_from_cli(cli: &Cli) -> SearchDomain {
 }
 
 /// Build a `SearchOptions` value using the provided CLI configuration and query.
-fn build_search_options(cli: &Cli, query: &str) -> SearchOptions {
+fn build_search_options(
+	common: &CommonArgs,
+	filters: &SearchFilterArgs,
+	query: &str,
+) -> SearchOptions {
 	let mut options = SearchOptions::new(query);
-	options.include_private = cli.private;
-	options.case_sensitive = cli.search_case_sensitive;
-	options.expand_containers = !cli.direct_match_only;
-	options.domains = search_domains_from_cli(cli);
+	options.include_private = common.private;
+	options.case_sensitive = filters.search_case_sensitive;
+	options.expand_containers = !filters.direct_match_only;
+	options.domains = search_domains_from_filters(filters);
 	options
 }
 
-/// Execute the list flow and print a structured item summary.
-fn run_list(cli: &Cli, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
-	if cli.raw {
-		return Err("--raw cannot be combined with --list".into());
-	}
+/// Render a skeleton locally and stream it to stdout or a pager.
+fn run_render(common: &CommonArgs, target: &str, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
+	let output = rs.render(
+		target,
+		common.no_default_features,
+		common.all_features,
+		common.features.clone(),
+		common.private,
+	)?;
 
+	println!("{output}");
+
+	Ok(())
+}
+
+/// Output raw rustdoc JSON.
+fn run_raw(common: &CommonArgs, target: &str, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
+	let output = rs.raw_json(
+		target,
+		common.no_default_features,
+		common.all_features,
+		common.features.clone(),
+		common.private,
+	)?;
+
+	println!("{output}");
+
+	Ok(())
+}
+
+/// Execute the list flow and print a structured item summary.
+fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
 	let mut search_options: Option<SearchOptions> = None;
 	let mut trimmed_query: Option<String> = None;
 
-	if let Some(query) = cli.search.as_deref() {
+	if let Some(query) = args.query.as_deref() {
 		let trimmed = query.trim();
 		if trimmed.is_empty() {
 			println!("Search query is empty; nothing to do.");
 			return Ok(());
 		}
 		trimmed_query = Some(trimmed.to_string());
-		search_options = Some(build_search_options(cli, trimmed));
+		search_options = Some(build_search_options(common, &args.filters, trimmed));
 	}
 
 	let listings = rs.list(
-		&cli.target,
-		cli.no_default_features,
-		cli.all_features,
-		cli.features.clone(),
-		cli.private,
+		&args.target,
+		common.no_default_features,
+		common.all_features,
+		common.features.clone(),
+		common.private,
 		search_options.as_ref(),
 	)?;
 
@@ -291,7 +350,7 @@ fn format_source_location(source: Option<&SourceLocation>) -> String {
 	}
 }
 
-/// Highlight all occurrences of the search query in the output text with red color.
+/// Highlight all occurrences of the search query.
 fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 	if query.is_empty() {
 		return text.to_string();
@@ -319,7 +378,7 @@ fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 		// Add the highlighted match
 		let match_end = absolute_pos + query.len();
 		let matched_text = &text[absolute_pos..match_end];
-		result.push_str(&matched_text.to_string().red().to_string());
+		result.push_str(&matched_text.to_string().bright_green().bold().to_string());
 		last_end = match_end;
 		search_start = match_end;
 	}
@@ -330,24 +389,23 @@ fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 }
 
 /// Execute the search flow and print the filtered skeleton to stdout.
-fn run_search(cli: &Cli, rs: &Ripdoc, query: &str) -> Result<(), Box<dyn Error>> {
-	if cli.raw {
-		return Err("--raw cannot be combined with --search".into());
+fn run_search(common: &CommonArgs, args: &SearchArgs, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
+	if args.query.is_none() {
+		return run_cargo_search_fallback(&args.target, common.offline);
 	}
-
-	let trimmed = query.trim();
+	let trimmed = args.query.as_deref().unwrap().trim();
 	if trimmed.is_empty() {
 		println!("Search query is empty; nothing to do.");
 		return Ok(());
 	}
 
-	let options = build_search_options(cli, trimmed);
+	let options = build_search_options(common, &args.filters, trimmed);
 
 	let response = rs.search(
-		&cli.target,
-		cli.no_default_features,
-		cli.all_features,
-		cli.features.clone(),
+		&args.target,
+		common.no_default_features,
+		common.all_features,
+		common.features.clone(),
 		&options,
 	)?;
 
@@ -356,26 +414,85 @@ fn run_search(cli: &Cli, rs: &Ripdoc, query: &str) -> Result<(), Box<dyn Error>>
 		return Ok(());
 	}
 
-	let output = highlight_matches(&response.rendered, trimmed, cli.search_case_sensitive);
+	let output = highlight_matches(
+		&response.rendered,
+		trimmed,
+		args.filters.search_case_sensitive,
+	);
 
 	print!("{}", output);
 
 	Ok(())
 }
 
+/// Fallback to `cargo search` when a query is missing.
+fn run_cargo_search_fallback(term: &str, offline: bool) -> Result<(), Box<dyn Error>> {
+	if offline {
+		return Err("--offline cannot be used with cargo search fallback. Please provide a query or re-run without --offline.".into());
+	}
+
+	let status = ProcessCommand::new("cargo")
+		.arg("search")
+		.arg(term)
+		.status()
+		.map_err(|e| format!("Failed to invoke cargo search: {e}"))?;
+
+	if !status.success() {
+		return Err(format!(
+			"`cargo search {term}` failed with exit code {}",
+			status.code().unwrap_or(-1)
+		)
+		.into());
+	}
+
+	Ok(())
+}
+
 fn main() {
 	let cli = Cli::parse();
-	let result = {
-		if let Err(e) = check_nightly_toolchain() {
-			eprintln!("{e}");
-			process::exit(1);
-		}
-		run_cmdline(&cli)
-	};
+	if let Err(e) = check_nightly_toolchain() {
+		eprintln!("{e}");
+		process::exit(1);
+	}
+
+	let result = run(cli);
 
 	if let Err(e) = result {
 		eprintln!("{e}");
 		process::exit(1);
+	}
+}
+
+fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
+	let common = cli.common;
+	let rs = build_ripdoc(&common);
+
+	match cli.command {
+		Some(Command::Render(args)) => run_render(&common, &args.target, &rs),
+		Some(Command::Raw(args)) => run_raw(&common, &args.target, &rs),
+		Some(Command::List(args)) => run_list(&common, &args, &rs),
+		Some(Command::Search(args)) => run_search(&common, &args, &rs),
+		None => {
+			let default_target = cli.legacy_target.unwrap_or_else(|| "./".to_string());
+			if !cli.legacy_extra.is_empty() {
+				let mut extras = cli.legacy_extra;
+				if extras.first().is_some_and(|s| s == "search") {
+					extras.remove(0);
+				}
+				let query = extras.join(" ").trim().to_string();
+				if query.is_empty() {
+					return Err("A search query is required when trailing arguments are provided without a subcommand.".into());
+				}
+				let search_args = SearchArgs {
+					target: default_target,
+					query: Some(query),
+					filters: SearchFilterArgs::default(),
+				};
+				run_search(&common, &search_args, &rs)
+			} else {
+				run_render(&common, &default_target, &rs)
+			}
+		}
 	}
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]

@@ -4,11 +4,11 @@ Ripdoc produces a syntactical outline of a crate's public API and documentation.
 
 ## Search Mode
 
-Use `--search`|`-s` to focus on specific items instead of rendering an entire crate. The query runs across multiple domains and returns the public API containing the matches and their ancestors for context.
+Use the `search` subcommand to focus on specific items instead of rendering an entire crate. The query runs across multiple domains and returns the public API containing the matches and their ancestors for context.
 
 ```sh
 # Show methods and fields matching "status" within the reqwest crate
-ripdoc reqwest --search status --search-spec name,signature
+ripdoc search reqwest status --search-spec name,signature
 ```
 
 By default the query matches the name, doc, and signature domains with case-insensitive comparisons. Include the optional `path` domain when you need canonical path matches by passing `--search-spec name,path`, or use `--search-spec doc` to inspect documentation only. Combine with `--search-case-sensitive` to require exact letter case.
@@ -19,11 +19,11 @@ The search output respects existing flags like `--private`, feature controls, an
 
 ## Listing Mode
 
-Use `--list`|`-l` to print a concise catalog of crate items instead of rendering Rust code. Each line reports the item kind and its fully qualified path:
+Use the `list` subcommand to print a concise catalog of crate items instead of rendering Rust code. Each line reports the item kind and its fully qualified path:
 
 ```sh
 # Survey the high-level structure of tokio without emitting code
-ripdoc tokio --list
+ripdoc list tokio
 
 crate      crate
 module     crate::sync
@@ -31,7 +31,7 @@ struct     crate::sync::Mutex
 trait      crate::io::AsyncRead
 ```
 
-Combine `--list` with `--search` to filter the catalog using the same domain controls as skeleton search. The listing honours `--private` and feature flags, and it conflicts with `--raw` because the output is tabular text rather than Rust code. Each row includes the source file and line.
+Filter listing output with `--search` just like the `search` subcommand. The listing honours `--private` and feature flags, and it cannot be combined with the `raw` subcommand because the output is tabular text rather than Rust code. Each row includes the source file and line.
 
 Below is a small excerpt from the `pandoc` crate showing how Ripdoc renders the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
 
@@ -98,8 +98,8 @@ Ripdoc renders Markdown by default as it is more token efficient. The output is 
 ## Features
 
 - Support for both local crates and remote crates from crates.io
-- Filter output to matched items using `--search` with the `--search-spec` domain selector and `--direct-match-only` when you want to avoid container expansion
-- Generate tabular item listings with `--list`, optionally filtered by `--search`
+- Filter output to matched items using the `search` subcommand with the `--search-spec` domain selector and `--direct-match-only` when you want to avoid container expansion
+- Generate tabular item listings with the `list` subcommand, optionally filtered by `--search`
 - Search match highlighting for terminal output
 - Markdown-friendly output, which strips doc markers and wraps code in fenced `rust` blocks (use `--format rs` for raw Rust output)
 - Optionally include private items and auto-implemented traits
@@ -135,7 +135,8 @@ Note: While ripdoc requires the nightly toolchain to run, you can install it usi
 Basic usage:
 
 ```sh
-ripdoc [TARGET]
+# Render (default if no subcommand is provided)
+ripdoc render [TARGET]
 ```
 
 See the help output for all options:
@@ -150,84 +151,39 @@ Ripdoc has a flexible target specification that tries to do the right thing in a
 # Current project
 ripdoc
 
-# If we're in a workspace and we have a crate mypacakage
-ripdoc mypackage
+# If we're in a workspace and we have a crate mypackage
+ripdoc render mypackage
 
 # A dependency of the current project, else we fetch from crates.io
-ripdoc serde
+ripdoc render serde
 
 # A sub-path within a crate
-ripdoc serde::de::Deserialize
+ripdoc render serde::de::Deserialize
 
 # Path to a crate
-ripdoc /my/path
+ripdoc render /my/path
 
 # A module within that crate
-ripdoc /my/path::foo
+ripdoc render /my/path::foo
 
 # A crate from crates.io with a specific version
-ripdoc serde@1.0.0
+ripdoc render serde@1.0.0
 
 # Search for "status" across names, signatures and doc comments
-ripdoc reqwest --search status
+ripdoc search reqwest status
 
 # Search for "status" in only names and signatures
-ripdoc reqwest --search status --search-spec name,signature
+ripdoc search reqwest status --search-spec name,signature
 
 # Search for "status" in docs only
-ripdoc reqwest --search status --search-spec doc
+ripdoc search reqwest status --search-spec doc
+
+# List public API items
+ripdoc list serde
 
 # Render Markdown output with stripped doc comment markers
-ripdoc serde --format markdown
+ripdoc render serde --format markdown
 ```
-
----
-
-## Experimental Hot Interpreter (PoC)
-
-The workspace also bundles an experimental Rust “interpreter” that demonstrates Subsecond-powered hotpatching. The binary is compile-gated behind the `hot-interpreter` feature and lives inside `ripdoc-cli`.
-
-```sh
-cargo run -p ripdoc-cli --features hot-interpreter --bin hotinterp path/to/script.rs
-```
-
-`hotinterp` watches the provided script file, generates a tiny helper crate that links against [`subsecond`](https://crates.io/crates/subsecond), and reloads the resulting dynamic library whenever you save. The entrypoint is wrapped in `subsecond::call`, so when you rebuild the generated crate (triggered automatically on save) the running session is rewound to the interpreter entrypoint instead of restarting the host process.
-
-Scripts are regular Rust modules. Define `pub fn hot_main(ctx: &mut ScriptContext) -> anyhow::Result<()>` and use the shared `ScriptContext` helper to stash state across reloads:
-
-```rust
-use crate::ScriptContext; // provided by the generated crate
-
-pub fn hot_main(ctx: &mut ScriptContext) -> anyhow::Result<()> {
-    let tick = ctx.cycle();
-    ctx.emit_line(format!("tick #{tick}"));
-
-    if tick == 0 {
-        ctx.set_number("sum", 0.0);
-    }
-
-    let sum = ctx.number("sum").unwrap_or(0.0) + 1.5;
-    ctx.set_number("sum", sum);
-    ctx.emit_line(format!("running sum: {sum}"));
-    ctx.set_text("status", "alive");
-    Ok(())
-}
-```
-
-`ScriptContext` offers a handful of batteries-included helpers:
-
-- `emit_line(&str)` buffers a line that `hotinterp` prints after each run.
-- `cycle()` reports how many times the script has executed (across reloads).
-- `set_number` / `number` store simple floating-point registers.
-- `set_text` / `text` do the same for string state.
-
-Flags:
-
-- `--once` runs the script one time and exits.
-- `--release` compiles the generated helper crate in release mode (default is dev for faster rebuilds).
-
-This PoC is intentionally small, but it sketches the workflow of editing a Rust “script”, saving, and letting Subsecond provide the hotpatch magic without restarting the host process.
-
 ---
 
 ## ripdoc-core library
