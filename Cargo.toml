@@ -22,5 +22,5 @@ ripdoc-cargo = { path = "crates/ripdoc-cargo" }
 ripdoc-render = { path = "crates/ripdoc-render" }
 
 [patch.crates-io]
-rustdoc-json = { path = "vendor/cargo-public-api/rustdoc-json" }
-cargo-manifest = { path = "vendor/cargo-manifest" }
+rustdoc-json = { git = "https://github.com/Alb-O/cargo-public-api" }
+cargo-manifest = { git = "https://github.com/Alb-O/cargo-manifest" }

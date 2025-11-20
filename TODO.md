@@ -1,0 +1,10 @@
+# RipDoc Roadmap (keep this updated!)
+
+Feel free to add more intermediate sub-tasks as needed.
+
+- [ ] functionality/subcommands for fetching:
+  - [ ] examples
+  - [ ] READMEs
+- [ ] 'with filename' support on module list (-l) show the originating .rs path for each
+  - [ ] ability to jump to that dump source code files easily (without having to know path of cache registry)
+    - [ ] possibly filter out/exclude comments/docstrings on source code dump as the docs would likely already be in context

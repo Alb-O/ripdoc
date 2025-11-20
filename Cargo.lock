@@ -116,6 +116,7 @@ dependencies = [
 [[package]]
 name = "cargo-manifest"
 version = "0.19.1"
+source = "git+https://github.com/Alb-O/cargo-manifest#40b5d0dc0da5bbce8f4c50610bd59375687ef7fa"
 dependencies = [
  "serde",
  "thiserror",
@@ -173,9 +174,9 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "clap"
-version = "4.5.51"
+version = "4.5.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c26d721170e0295f191a69bd9a1f93efcdb0aff38684b61ab5750468972e5f5"
+checksum = "c9e340e012a1bf4935f5282ed1436d1489548e8f72308207ea5df0e23d2d03f8"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -183,9 +184,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.51"
+version = "4.5.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75835f0c7bf681bfd05abe44e965760fea999a5286c6eb2d59883634fd02011a"
+checksum = "d76b5d13eaa18c901fd2f7fca939fefe3a0727a953561fefdf3b2922b8569d00"
 dependencies = [
  "anstream",
  "anstyle",
@@ -732,6 +733,7 @@ checksum = "60e7c00b6c3bf5e38a880eec01d7e829d12ca682079f8238a464def3c4b31627"
 [[package]]
 name = "rustdoc-json"
 version = "0.9.7"
+source = "git+https://github.com/Alb-O/cargo-public-api#f874217dae2c81bc04acee91fb1369732d4f3f0e"
 dependencies = [
  "cargo-manifest",
  "cargo_metadata",

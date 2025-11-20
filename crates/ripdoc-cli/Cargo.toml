@@ -31,6 +31,10 @@ hot-interpreter = [
 ]
 
 [[bin]]
+name = "ripdoc"
+path = "src/main.rs"
+
+[[bin]]
 name = "hotinterp"
 path = "src/bin/hotinterp.rs"
 required-features = ["hot-interpreter"]

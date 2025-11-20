@@ -1,6 +1,0 @@
-[submodule "vendor/cargo-public-api"]
-	path = vendor/cargo-public-api
-	url = https://github.com/cargo-public-api/cargo-public-api
-[submodule "vendor/cargo-manifest"]
-	path = vendor/cargo-manifest
-	url = https://github.com/LukeMathWalker/cargo-manifest
