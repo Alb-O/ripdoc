@@ -36,5 +36,5 @@ path = "src/main.rs"
 
 [[bin]]
 name = "hotinterp"
-path = "src/bin/hotinterp.rs"
+path = "src/poc/hotinterp/main.rs"
 required-features = ["hot-interpreter"]

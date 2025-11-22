@@ -12,7 +12,7 @@ use libloading::Library;
 use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tempfile::TempDir;
 
-const RUNTIME_SOURCE: &str = include_str!("hotinterp/runtime.rs");
+const RUNTIME_SOURCE: &str = include_str!("runtime.rs");
 const SCRIPT_CARGO_TOML: &str = r#"
 [package]
 name = "hot_script"
@@ -31,7 +31,7 @@ subsecond = "0.7"
 mod runtime_defs {
 	include!(concat!(
 		env!("CARGO_MANIFEST_DIR"),
-		"/src/bin/hotinterp/runtime.rs"
+		"/src/poc/hotinterp/runtime.rs"
 	));
 }
 
