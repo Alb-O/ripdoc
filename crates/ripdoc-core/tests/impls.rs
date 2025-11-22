@@ -1,6 +1,6 @@
 //! Integration tests for impl block rendering.
 mod utils;
-use ripdoc_core::Renderer;
+use ripdoc_core::{RenderFormat, Renderer};
 use utils::*;
 
 gen_tests! {
@@ -239,7 +239,7 @@ gen_tests! {
 		}
 		rt_custom {
 			default_impl: {
-				renderer: Renderer::default().with_private_items(true),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_private_items(true),
 				input: r#"
                     trait DefaultTrait {
                         fn default_method(&self) { }

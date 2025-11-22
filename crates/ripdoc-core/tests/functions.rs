@@ -1,6 +1,6 @@
 //! Integration tests validating function signature rendering.
 mod utils;
-use ripdoc_core::Renderer;
+use ripdoc_core::{RenderFormat, Renderer};
 use utils::*;
 
 gen_tests! {
@@ -84,7 +84,7 @@ gen_tests! {
 		}
 		rt_custom {
 			render_private: {
-				renderer: Renderer::default().with_private_items(true),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_private_items(true),
 				input: r#"
                     fn private_function() {}
                     pub fn public_function() {}

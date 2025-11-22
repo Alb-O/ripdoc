@@ -1,6 +1,6 @@
 //! Integration tests validating enum rendering behaviour.
 mod utils;
-use ripdoc_core::Renderer;
+use ripdoc_core::{RenderFormat, Renderer};
 use utils::*;
 
 gen_tests! {
@@ -9,15 +9,11 @@ gen_tests! {
 			with_where_clause: r#"
                 pub enum WhereEnum<T, U>
                 where
-                    T: Clone,
-                    U: Default,
-                {
-                    Variant1(T),
-                    Variant2(U),
-                    Variant3 {
-                        field1: T,
-                        field2: U,
-                    },
+                	T: Clone,
+                	U: Default, {
+                	Variant1(T),
+                	Variant2(U),
+                	Variant3 { field1: T, field2: U },
                 }
             "#
 		}
@@ -44,7 +40,7 @@ gen_tests! {
                 "#,
 				output: r#"
                     pub enum PrivateVariantsEnum {
-                        Variant1,
+                    	Variant1,
                     }
                 "#
 			}
@@ -83,18 +79,16 @@ gen_tests! {
 				output: r#"
                     #[derive(Clone, Debug)]
                     pub enum DeriveEnum {
-                        Variant1,
-                        Variant2(String),
-                        Variant3 {
-                            field: i32,
-                        },
+                    	Variant1,
+                    	Variant2(String),
+                    	Variant3 { field: i32 },
                     }
                 "#
 			}
 		}
 		rt_custom {
 			pub_enum_with_private_rendering: {
-				renderer: Renderer::default().with_private_items(false),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_private_items(false),
 				input: r#"
                     pub enum PubEnumWithPrivateFields {
                         Variant1,
@@ -112,12 +106,9 @@ gen_tests! {
                 "#,
 				output: r#"
                     pub enum PubEnumWithPrivateFields {
-                        Variant1,
-                        Variant2(i32),
-                        Variant3 {
-                            field1: String,
-                            field2: bool,
-                        }
+                    	Variant1,
+                    	Variant2(i32),
+                    	Variant3 { field1: String, field2: bool },
                     }
                 "#
 			}

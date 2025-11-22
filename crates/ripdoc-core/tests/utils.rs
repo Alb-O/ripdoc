@@ -9,7 +9,7 @@ use std::fs;
 
 use pretty_assertions::assert_eq;
 use ripdoc_core::{Renderer, Ripdoc};
-use rust_format::{Formatter, RustFmt};
+use rust_format::{Config, Formatter, RustFmt};
 use rustdoc_types::Crate;
 use tempfile::TempDir;
 
@@ -113,22 +113,38 @@ pub fn render(renderer: &Renderer, source: &str, expected_output: &str, is_proc_
 
 	let normalized_expected = normalize_whitespace(expected_output);
 
-	let formatter = RustFmt::default();
-	assert_eq!(
-		formatter.format_str(normalized_rendered).unwrap(),
-		formatter.format_str(normalized_expected).unwrap(),
-	);
+	// Only use rustfmt for Rust format, not Markdown
+	match renderer.format {
+		ripdoc_core::RenderFormat::Rust => {
+			let config = Config::new_str().option("hard_tabs", "true");
+			let formatter = RustFmt::from_config(config);
+			assert_eq!(
+				formatter.format_str(normalized_rendered).unwrap(),
+				formatter.format_str(normalized_expected).unwrap(),
+			);
+		}
+		ripdoc_core::RenderFormat::Markdown => {
+			assert_eq!(normalized_rendered, normalized_expected);
+		}
+	}
 }
 
 /// Idempotent rendering test
 pub fn rt_idemp(source: &str) {
-	render(&Renderer::default(), source, source, false);
+	render(
+		&Renderer::default().with_format(ripdoc_core::RenderFormat::Rust),
+		source,
+		source,
+		false,
+	);
 }
 
 /// Idempotent rendering test with private items
 pub fn rt_priv_idemp(source: &str) {
 	render(
-		&Renderer::default().with_private_items(true),
+		&Renderer::default()
+			.with_format(ripdoc_core::RenderFormat::Rust)
+			.with_private_items(true),
 		source,
 		source,
 		false,
@@ -137,13 +153,20 @@ pub fn rt_priv_idemp(source: &str) {
 
 /// Render roundtrip
 pub fn rt(source: &str, expected_output: &str) {
-	render(&Renderer::default(), source, expected_output, false);
+	render(
+		&Renderer::default().with_format(ripdoc_core::RenderFormat::Rust),
+		source,
+		expected_output,
+		false,
+	);
 }
 
 /// Render roundtrip with private items
 pub fn rt_private(source: &str, expected_output: &str) {
 	render(
-		&Renderer::default().with_private_items(true),
+		&Renderer::default()
+			.with_format(ripdoc_core::RenderFormat::Rust)
+			.with_private_items(true),
 		source,
 		expected_output,
 		false,
@@ -152,7 +175,12 @@ pub fn rt_private(source: &str, expected_output: &str) {
 
 /// Render roundtrip for procedural macro crates.
 pub fn rt_procmacro(source: &str, expected_output: &str) {
-	render(&Renderer::default(), source, expected_output, true);
+	render(
+		&Renderer::default().with_format(ripdoc_core::RenderFormat::Rust),
+		source,
+		expected_output,
+		true,
+	);
 }
 
 /// Assert that rendering fails with a specific error message.

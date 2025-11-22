@@ -104,12 +104,15 @@ struct ListArgs {
 	#[arg(default_value = "./")]
 	target: String,
 
-	/// Optional search query used to filter the listing.
+	/// Optional search query used to filter the listing
 	#[arg(short = 's', long)]
-	query: Option<String>,
+	search: Option<String>,
 
 	#[command(flatten)]
 	filters: SearchFilterArgs,
+
+	#[command(flatten)]
+	common: CommonArgs,
 }
 
 #[derive(Args, Clone)]
@@ -118,12 +121,15 @@ struct PrintArgs {
 	#[arg(default_value = "./")]
 	target: String,
 
-	/// Search query used to filter the printed skeleton.
+	/// Search query used to filter the printed skeleton
 	#[arg(short = 's', long)]
 	search: Option<String>,
 
 	#[command(flatten)]
 	filters: SearchFilterArgs,
+
+	#[command(flatten)]
+	common: CommonArgs,
 }
 
 #[derive(Args, Clone)]
@@ -131,6 +137,9 @@ struct ReadmeArgs {
 	/// Target to generate - a directory, file path, or a module name
 	#[arg(default_value = "./")]
 	target: String,
+
+	#[command(flatten)]
+	common: CommonArgs,
 }
 
 #[derive(Subcommand, Clone)]
@@ -146,18 +155,11 @@ enum Command {
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None, override_usage = "ripdoc [OPTIONS] [COMMAND] [TARGET]")]
+#[command(author, version, about, long_about = None)]
 /// Parsed command-line options for the ripdoc CLI.
 struct Cli {
 	#[command(subcommand)]
-	command: Option<Command>,
-
-	/// Target to generate - a directory, file path, or a module name
-	#[arg()]
-	target: Option<String>,
-
-	#[command(flatten)]
-	common: CommonArgs,
+	command: Command,
 }
 
 /// Ensure the nightly toolchain and rust-docs JSON component are present.
@@ -315,7 +317,7 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 	let mut search_options: Option<SearchOptions> = None;
 	let mut trimmed_query: Option<String> = None;
 
-	if let Some(query) = args.query.as_deref() {
+	if let Some(query) = args.search.as_deref() {
 		let trimmed = query.trim();
 		if trimmed.is_empty() {
 			println!("Search query is empty; nothing to do.");
@@ -531,23 +533,20 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
-	let common = cli.common;
-	let rs = build_ripdoc(&common);
-
 	match cli.command {
-		Some(Command::Print(args)) => run_print(&common, &args, &rs),
-		Some(Command::Raw(args)) => run_raw(&common, &args.target, &rs),
-		Some(Command::List(args)) => run_list(&common, &args, &rs),
-		Some(Command::Readme(args)) => run_readme(&common, &args),
-		None => {
-			let target = cli.target.unwrap_or_else(|| "./".to_string());
-			let default_args = PrintArgs {
-				target,
-				search: None,
-				filters: SearchFilterArgs::default(),
-			};
-			run_print(&common, &default_args, &rs)
+		Command::Print(args) => {
+			let rs = build_ripdoc(&args.common);
+			run_print(&args.common, &args, &rs)
 		}
+		Command::Raw(args) => {
+			let rs = build_ripdoc(&args.common);
+			run_raw(&args.common, &args.target, &rs)
+		}
+		Command::List(args) => {
+			let rs = build_ripdoc(&args.common);
+			run_list(&args.common, &args, &rs)
+		}
+		Command::Readme(args) => run_readme(&args.common, &args),
 	}
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]

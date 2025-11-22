@@ -81,7 +81,9 @@ impl Default for Renderer {
 impl Renderer {
 	/// Create a renderer with default configuration.
 	pub fn new() -> Self {
-		let config = Config::new_str().option("brace_style", "PreferSameLine");
+		let config = Config::new_str()
+			.option("brace_style", "PreferSameLine")
+			.option("hard_tabs", "true");
 		Self {
 			formatter: RustFmt::from_config(config),
 			format: RenderFormat::Markdown,

@@ -1,6 +1,6 @@
 //! Integration tests asserting filter behaviour for rendered output.
 mod utils;
-use ripdoc_core::Renderer;
+use ripdoc_core::{RenderFormat, Renderer};
 use utils::*;
 
 gen_tests! {
@@ -9,7 +9,7 @@ gen_tests! {
 			filter_module: {
 				// Test filtering a specific module
 				// Module docs should be rendered for the filtered module
-				renderer: Renderer::default().with_filter("my_module"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -34,7 +34,7 @@ gen_tests! {
 			filter_nested_module: {
 				// Test filtering a nested module
 				// Module docs should not be rendered for parent modules
-				renderer: Renderer::default().with_filter("outer::inner"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("outer::inner"),
 				input: r#"
                     pub mod outer {
                         //! Outer module docs
@@ -59,7 +59,7 @@ gen_tests! {
 			filter_specific_item: {
 				// Test filtering a specific item within a module
 				// Module docs should not be rendered when filtering a specific item
-				renderer: Renderer::default().with_filter("my_module::MyStruct"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module::MyStruct"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -85,7 +85,7 @@ gen_tests! {
 			filter_trait: {
 				// Test filtering a trait
 				// Module docs should not be rendered when filtering a trait
-				renderer: Renderer::default().with_filter("my_module::MyTrait"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module::MyTrait"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -115,7 +115,7 @@ gen_tests! {
 			filter_enum: {
 				// Test filtering an enum
 				// Module docs should not be rendered when filtering an enum
-				renderer: Renderer::default().with_filter("my_module::MyEnum"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module::MyEnum"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -145,7 +145,7 @@ gen_tests! {
 			filter_with_impl: {
 				// Test filtering a struct with its impl
 				// Module docs should not be rendered when filtering a struct
-				renderer: Renderer::default().with_filter("my_module::MyStruct"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module::MyStruct"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -177,7 +177,7 @@ gen_tests! {
 			filter_impl_fn: {
 				// Test filtering a struct with its impl
 				// Module docs should not be rendered when filtering a struct
-				renderer: Renderer::default().with_filter("my_module::MyStruct::new"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module::MyStruct::new"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -211,7 +211,7 @@ gen_tests! {
 			filter_function: {
 				// Test filtering a function
 				// Module docs should not be rendered when filtering a function
-				renderer: Renderer::default().with_filter("my_module::my_function"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module::my_function"),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -237,7 +237,7 @@ gen_tests! {
 			filter_with_private_items: {
 				// Test filtering with private items included
 				// Module docs should be rendered for the filtered module
-				renderer: Renderer::default().with_filter("my_module").with_private_items(true),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module").with_private_items(true),
 				input: r#"
                     pub mod my_module {
                         //! My module docs
@@ -263,7 +263,7 @@ gen_tests! {
 			no_filter: {
 				// Test with no filter
 				// All module docs should be rendered
-				renderer: Renderer::default(),
+				renderer: Renderer::default().with_format(RenderFormat::Rust),
 				input: r#"
                     //! Root module docs
                     
@@ -299,7 +299,7 @@ gen_tests! {
 	filter_error, {
 		rt_custom {
 			filter_matched: {
-				renderer: Renderer::default().with_filter("my_module"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module"),
 				input: r#"
                     pub mod my_module {
                         pub fn my_function() {}
@@ -314,7 +314,7 @@ gen_tests! {
 		}
 		rt_custom {
 			no_filter: {
-				renderer: Renderer::default(),
+				renderer: Renderer::default().with_format(RenderFormat::Rust),
 				input: r#"
                     pub mod my_module {
                         pub fn my_function() {}
@@ -335,7 +335,7 @@ gen_tests! {
 		}
 		rt_custom {
 			partial_match: {
-				renderer: Renderer::default().with_filter("my_module"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("my_module"),
 				input: r#"
                     pub mod my_module {
                         pub mod nested_module {
@@ -354,7 +354,7 @@ gen_tests! {
 		}
 		rt_err {
 			filter_not_matched: {
-				renderer: Renderer::default().with_filter("non_existent_module"),
+				renderer: Renderer::default().with_format(RenderFormat::Rust).with_filter("non_existent_module"),
 				input: r#"
                     pub mod my_module {
                         pub fn my_function() {}
