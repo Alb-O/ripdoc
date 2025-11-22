@@ -41,8 +41,7 @@ pub const GAP_MARKER: &str = "// ...";
 pub fn starts_with_gap(output: &str) -> bool {
 	output
 		.lines()
-		.skip_while(|line| line.trim().is_empty())
-		.next()
+		.find(|line| !line.trim().is_empty())
 		.map(|line| line.trim_start() == GAP_MARKER)
 		.unwrap_or(false)
 }

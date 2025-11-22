@@ -124,6 +124,63 @@ fn find_in_cargo_cache(name: &str, version: &str) -> Result<Option<PathBuf>> {
 	Ok(None)
 }
 
+/// Find the latest cached version of a crate in cargo's registry cache.
+/// Returns the path to the crate directory and the version string.
+pub fn find_latest_cached_version(name: &str) -> Result<Option<(PathBuf, String)>> {
+	let cargo_home = get_cargo_home()?;
+	let registry_src = cargo_home.join("registry").join("src");
+
+	if !registry_src.exists() {
+		return Ok(None);
+	}
+
+	let mut found_versions: Vec<(PathBuf, Version)> = Vec::new();
+
+	// Look for all versions of the crate in the registry source directories
+	for entry in fs::read_dir(&registry_src)? {
+		let entry = entry?;
+		let index_dir = entry.path();
+		if !index_dir.is_dir() {
+			continue;
+		}
+
+		// Scan the index directory for crates matching the name pattern
+		if let Ok(crates) = fs::read_dir(&index_dir) {
+			for crate_entry in crates {
+				let crate_entry = crate_entry?;
+				let crate_dir = crate_entry.path();
+				if !crate_dir.is_dir() {
+					continue;
+				}
+
+				// Parse the directory name: <crate-name>-<version>
+				if let Some(dir_name) = crate_dir.file_name().and_then(|n| n.to_str()) {
+					let prefix = format!("{}-", name);
+					if let Some(version_str) = dir_name.strip_prefix(&prefix) {
+						// Verify it has a Cargo.toml
+						if crate_dir.join("Cargo.toml").exists() {
+							// Try to parse the version
+							if let Ok(version) = Version::parse(version_str) {
+								found_versions.push((crate_dir, version));
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if found_versions.is_empty() {
+		return Ok(None);
+	}
+
+	// Sort by version and take the latest
+	found_versions.sort_by(|(_, a), (_, b)| b.cmp(a));
+	let (path, version) = found_versions.into_iter().next().unwrap();
+
+	Ok(Some((path, version.to_string())))
+}
+
 /// Use `cargo fetch` to download a crate into cargo's cache
 fn fetch_with_cargo(name: &str, version: &str) -> Result<()> {
 	// Create a temporary directory with a minimal Cargo.toml
@@ -182,6 +239,31 @@ fn get_cargo_home() -> Result<PathBuf> {
 	Err(RipdocError::Generate(
 		"Could not determine CARGO_HOME directory".to_string(),
 	))
+}
+
+/// Fetch the README content for a crate from crates.io.
+pub fn fetch_readme(name: &str, version: Option<&Version>) -> Result<String> {
+	let resolved_version = if let Some(version) = version {
+		version.to_string()
+	} else {
+		fetch_latest_version(name)?
+	};
+
+	let url = format!("{CRATES_IO_API}/{name}/{resolved_version}/readme");
+	let mut response = request(&url, name)?;
+
+	let mut body = String::new();
+	response
+		.body_mut()
+		.as_reader()
+		.read_to_string(&mut body)
+		.map_err(|err| {
+			RipdocError::Generate(format!(
+				"Failed to read README response for '{name}': {err}"
+			))
+		})?;
+
+	Ok(body)
 }
 
 fn request(url: &str, crate_name: &str) -> Result<http::Response<ureq::Body>> {

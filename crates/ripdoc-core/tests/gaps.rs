@@ -4,7 +4,7 @@ mod utils;
 use std::collections::HashSet;
 
 use ripdoc_core::{RenderFormat, Renderer, Ripdoc};
-use ripdoc_render::{RenderSelection};
+use ripdoc_render::RenderSelection;
 use ripdoc_render::utils::GAP_MARKER;
 use rustdoc_types::ItemEnum;
 use utils::*;

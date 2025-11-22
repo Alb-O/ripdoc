@@ -1,8 +1,7 @@
 use rustdoc_types::{Crate, Id, Item};
 
 use super::core::{RenderSelection, Renderer};
-use super::utils::{must_get, ppush, FilterMatch, GAP_MARKER};
-use super::utils::{ends_with_gap, starts_with_gap};
+use super::utils::{FilterMatch, GAP_MARKER, ends_with_gap, must_get, ppush, starts_with_gap};
 use crate::error::{Result, RipdocError};
 
 /// Tracks whether a gap marker should be inserted before the next rendered item.
@@ -197,7 +196,7 @@ impl<'a, 'b> RenderState<'a, 'b> {
 		if !ends_with_gap(output) && !starts_with_gap(next_block) {
 			output.push_str(indent);
 			output.push_str(GAP_MARKER);
-			output.push_str("\n");
+			output.push('\n');
 		}
 
 		self.gap_state = GapState::Clear;

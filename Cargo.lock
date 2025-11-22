@@ -695,6 +695,7 @@ dependencies = [
  "libloading 0.9.0",
  "notify",
  "owo-colors",
+ "ripdoc-cargo",
  "ripdoc-core",
  "subsecond",
  "tempfile",

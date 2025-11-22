@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use bitflags::bitflags;
 use ripdoc_render::{
-	render_name, render_path, render_type, signatures as signature, RenderSelection,
+	RenderSelection, render_name, render_path, render_type, signatures as signature,
 };
 use rustdoc_types::{Crate, Id, Item, ItemEnum, Module, Struct, StructKind, Visibility};
 
@@ -819,10 +819,10 @@ impl<'a> IndexBuilder<'a> {
 		let span = item.span.as_ref()?;
 		let mut path = span.filename.clone();
 
-		if let Some(root) = &self.source_root {
-			if path.is_relative() {
-				path = root.join(path);
-			}
+		if let Some(root) = &self.source_root
+			&& path.is_relative()
+		{
+			path = root.join(path);
 		}
 
 		let absolute_path = match path.canonicalize() {

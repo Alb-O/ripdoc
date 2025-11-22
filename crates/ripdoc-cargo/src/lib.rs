@@ -3,7 +3,7 @@
 pub use self::cache::{CacheConfig, CacheKey, get_toolchain_version, load_cached, save_cached};
 pub use self::error::{Result, RipdocError};
 pub use self::path::CargoPath;
-pub use self::registry::fetch_registry_crate;
+pub use self::registry::{fetch_readme, fetch_registry_crate, find_latest_cached_version};
 pub use self::resolved_target::{ResolvedTarget, resolve_target};
 pub use self::rustdoc_error::map_rustdoc_build_error;
 /// Caching layer for rustdoc JSON output.

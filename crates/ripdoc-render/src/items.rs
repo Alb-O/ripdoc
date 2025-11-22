@@ -202,7 +202,7 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 
 	for item_id in &module.items {
 		let child_item = must_get(state.crate_data, item_id);
-		
+
 		let rendered = render_item(state, &path_prefix, child_item, false);
 		if !rendered.is_empty() {
 			gaps.emit_if_needed(state, &mut output, &rendered);
@@ -229,13 +229,13 @@ pub fn render_struct(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 
 	let generics = render_generics(&struct_.generics);
 	let where_clause = render_where_clause(&struct_.generics);
-	
+
 	// Collect inline traits first while we have immutable access
 	let inline_traits: Vec<String> = collect_inline_traits(state, &struct_.impls)
 		.into_iter()
 		.map(|s| s.to_string())
 		.collect();
-	
+
 	let ctx = StructRenderContext::new(state, item, generics, where_clause);
 
 	let rendered_struct = match &struct_.kind {
@@ -319,7 +319,11 @@ fn render_struct_tuple(
 	}
 }
 
-fn render_struct_plain(state: &mut RenderState, ctx: &StructRenderContext, fields: &[Id]) -> String {
+fn render_struct_plain(
+	state: &mut RenderState,
+	ctx: &StructRenderContext,
+	fields: &[Id],
+) -> String {
 	let mut output = format!(
 		"{}struct {}{}{} {{\n",
 		render_vis(ctx.item()),

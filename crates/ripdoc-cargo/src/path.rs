@@ -284,6 +284,31 @@ impl CargoPath {
 		packages.sort();
 		Ok(packages)
 	}
+
+	/// Find and read the README file in the crate directory.
+	pub fn find_readme(&self) -> Result<Option<String>> {
+		let root = self.as_path();
+		let readme_names = [
+			"README.md",
+			"README.org",
+			"README.adoc",
+			"README.asciidoc",
+			"README.txt",
+			"README",
+		];
+
+		for name in &readme_names {
+			let readme_path = root.join(name);
+			if readme_path.exists() && readme_path.is_file() {
+				let content = fs::read_to_string(&readme_path).map_err(|err| {
+					RipdocError::Generate(format!("Failed to read README: {err}"))
+				})?;
+				return Ok(Some(content));
+			}
+		}
+
+		Ok(None)
+	}
 }
 
 #[cfg(test)]

@@ -5,6 +5,7 @@ use std::process::{self, Command as ProcessCommand, Stdio};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use owo_colors::OwoColorize;
+use ripdoc_cargo::{fetch_readme, find_latest_cached_version, resolve_target};
 use ripdoc_core::{RenderFormat, Ripdoc, SearchDomain, SearchOptions, SourceLocation};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -125,6 +126,13 @@ struct PrintArgs {
 	filters: SearchFilterArgs,
 }
 
+#[derive(Args, Clone)]
+struct ReadmeArgs {
+	/// Target to generate - a directory, file path, or a module name
+	#[arg(default_value = "./")]
+	target: String,
+}
+
 #[derive(Subcommand, Clone)]
 enum Command {
 	/// Print a crate skeleton (default).
@@ -133,6 +141,8 @@ enum Command {
 	List(ListArgs),
 	/// Emit raw rustdoc JSON.
 	Raw(PrintArgs),
+	/// Fetch and print the README of the target crate.
+	Readme(ReadmeArgs),
 }
 
 #[derive(Parser)]
@@ -380,6 +390,93 @@ fn format_source_location(source: Option<&SourceLocation>) -> String {
 	}
 }
 
+/// Fetch and print the README for the target crate.
+fn run_readme(common: &CommonArgs, args: &ReadmeArgs) -> Result<(), Box<dyn Error>> {
+	use std::env;
+	use std::path::PathBuf;
+
+	use ripdoc_cargo::target::{Entrypoint, Target};
+
+	// Parse the target first to understand what type it is
+	let target_parsed = Target::parse(&args.target)?;
+
+	// Determine the starting path for local README search
+	let search_path: Option<PathBuf> = match &target_parsed.entrypoint {
+		Entrypoint::Path(path) => Some(if path.is_absolute() {
+			path.clone()
+		} else {
+			env::current_dir()?.join(path)
+		}),
+		Entrypoint::Name { name: _, .. } => {
+			// Try to resolve target to see if it's a local workspace member or dependency
+			resolve_target(&args.target, common.offline)
+				.ok()
+				.map(|resolved| resolved.package_root().to_path_buf())
+		}
+	};
+
+	// If we have a local path to search, look for README there and in parent directories
+	if let Some(mut current_path) = search_path {
+		if let Ok(canonical) = current_path.canonicalize() {
+			current_path = canonical;
+		}
+
+		// Try current directory and up to 5 parent directories
+		let cargo_path = ripdoc_cargo::CargoPath::Path(current_path.clone());
+		if let Ok(Some(content)) = cargo_path.find_readme() {
+			println!("{}", content);
+			return Ok(());
+		}
+		let mut parent_path = current_path.parent();
+		let mut depth = 0;
+		while let Some(parent) = parent_path {
+			if depth >= 5 {
+				break;
+			}
+			let parent_cargo_path = ripdoc_cargo::CargoPath::Path(parent.to_path_buf());
+			if let Ok(Some(content)) = parent_cargo_path.find_readme() {
+				println!("{}", content);
+				return Ok(());
+			}
+			parent_path = parent.parent();
+			depth += 1;
+		}
+	}
+
+	// Try fetching from crates.io
+	match target_parsed.entrypoint {
+		Entrypoint::Name { name, version } => {
+			if common.offline {
+				// Try to find the latest cached version
+				if let Some((crate_path, found_version)) = find_latest_cached_version(&name)? {
+					let cargo_path = ripdoc_cargo::CargoPath::Path(crate_path);
+					if let Ok(Some(content)) = cargo_path.find_readme() {
+						eprintln!(
+							"Using cached version {} (latest available locally)",
+							found_version
+						);
+						println!("{}", content);
+						return Ok(());
+					}
+				}
+
+				return Err(format!(
+					"README not found locally for '{}'. \
+					 When using --offline, either:\n\
+					 1. Specify a version (e.g., 'ripdoc readme {}@version')\n\
+					 2. Run without --offline to fetch from crates.io",
+					name, name
+				)
+				.into());
+			}
+			let readme = fetch_readme(&name, version.as_ref())?;
+			println!("{}", readme);
+			Ok(())
+		}
+		_ => Err("README not found for this target".into()),
+	}
+}
+
 /// Highlight all occurrences of the search query.
 fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 	if query.is_empty() {
@@ -441,6 +538,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 		Some(Command::Print(args)) => run_print(&common, &args, &rs),
 		Some(Command::Raw(args)) => run_raw(&common, &args.target, &rs),
 		Some(Command::List(args)) => run_list(&common, &args, &rs),
+		Some(Command::Readme(args)) => run_readme(&common, &args),
 		None => {
 			let target = cli.target.unwrap_or_else(|| "./".to_string());
 			let default_args = PrintArgs {

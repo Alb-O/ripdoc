@@ -78,12 +78,12 @@ fn strip_outer_module(source: &str) -> String {
 	// emitted when there are no visible items in the crate.
 	if lines.len() == 1 {
 		let first = lines[0].trim();
-		if first.starts_with("pub mod ") && first.ends_with('}') {
-			if let (Some(open), Some(close)) = (first.find('{'), first.rfind('}')) {
-				if first[open + 1..close].trim().is_empty() {
-					return String::new();
-				}
-			}
+		if first.starts_with("pub mod ")
+			&& first.ends_with('}')
+			&& let (Some(open), Some(close)) = (first.find('{'), first.rfind('}'))
+			&& first[open + 1..close].trim().is_empty()
+		{
+			return String::new();
 		}
 	}
 
@@ -169,9 +169,9 @@ fn render_doc_block(doc_block: &[(String, String)], markdown: &mut String) -> bo
 	for (_, text) in doc_block {
 		let trimmed_end = text.trim_end();
 		let trimmed_start = trimmed_end.trim_start();
-		if trimmed_start.starts_with("```") {
+		if let Some(stripped) = trimmed_start.strip_prefix("```") {
 			flush_paragraph(markdown, &mut paragraph, &mut contains_text);
-			let lang = trimmed_start[3..].trim();
+			let lang = stripped.trim();
 			if let Some(mapped) = normalize_doc_lang(lang) {
 				if fence_open {
 					markdown.push_str("```\n\n");
