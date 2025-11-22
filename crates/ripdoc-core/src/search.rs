@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use bitflags::bitflags;
 use ripdoc_render::{
-	RenderSelection, render_name, render_path, render_type, signatures as signature,
+	render_name, render_path, render_type, signatures as signature, RenderSelection,
 };
 use rustdoc_types::{Crate, Id, Item, ItemEnum, Module, Struct, StructKind, Visibility};
 
@@ -270,6 +270,9 @@ impl SearchIndex {
 			trimmed.to_lowercase()
 		};
 
+		// For signature and doc searches, also create a symbol-stripped version of the query
+		let stripped_query = strip_symbols(&normalized_query);
+
 		let mut results = Vec::new();
 		for entry in &self.entries {
 			let mut matched = SearchDomain::empty();
@@ -279,11 +282,10 @@ impl SearchIndex {
 				matched |= SearchDomain::NAMES;
 			}
 			if opts.domains.contains(SearchDomain::DOCS)
-				&& entry
-					.docs
-					.as_ref()
-					.is_some_and(|docs| contains(docs, &normalized_query, opts.case_sensitive))
-			{
+				&& entry.docs.as_ref().is_some_and(|docs| {
+					let stripped_docs = strip_symbols(docs);
+					contains(&stripped_docs, &stripped_query, opts.case_sensitive)
+				}) {
 				matched |= SearchDomain::DOCS;
 			}
 			if opts.domains.contains(SearchDomain::PATHS)
@@ -292,11 +294,10 @@ impl SearchIndex {
 				matched |= SearchDomain::PATHS;
 			}
 			if opts.domains.contains(SearchDomain::SIGNATURES)
-				&& entry
-					.signature
-					.as_ref()
-					.is_some_and(|sig| contains(sig, &normalized_query, opts.case_sensitive))
-			{
+				&& entry.signature.as_ref().is_some_and(|sig| {
+					let stripped_sig = strip_symbols(sig);
+					contains(&stripped_sig, &stripped_query, opts.case_sensitive)
+				}) {
 				matched |= SearchDomain::SIGNATURES;
 			}
 
@@ -970,6 +971,14 @@ fn contains(haystack: &str, needle: &str, case_sensitive: bool) -> bool {
 	} else {
 		haystack.to_lowercase().contains(needle)
 	}
+}
+
+/// Strip Rust syntax symbols from text, keeping only alphanumeric characters, underscores, and whitespace.
+/// This is used when searching signatures to avoid matching against irrelevant syntax characters.
+fn strip_symbols(text: &str) -> String {
+	text.chars()
+		.filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '_')
+		.collect()
 }
 
 /// Build a renderer selection set covering matches, their ancestors, and optionally their children.
