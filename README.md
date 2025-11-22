@@ -4,11 +4,11 @@ Ripdoc produces a syntactical outline of a crate's public API and documentation.
 
 ## Search Mode
 
-Use the `search` subcommand to focus on specific items instead of rendering an entire crate. The query runs across multiple domains and returns the public API containing the matches and their ancestors for context.
+Use the `--search` flag with the `print` command to focus on specific items instead of printing an entire crate. The query runs across multiple domains and returns the public API containing the matches and their ancestors for context.
 
 ```sh
 # Show methods and fields matching "status" within the reqwest crate
-ripdoc search reqwest status --search-spec name,signature
+ripdoc print reqwest --search status --search-spec name,signature
 ```
 
 By default the query matches the name, doc, and signature domains with case-insensitive comparisons. Include the optional `path` domain when you need canonical path matches by passing `--search-spec name,path`, or use `--search-spec doc` to inspect documentation only. Combine with `--search-case-sensitive` to require exact letter case.
@@ -19,11 +19,10 @@ The search output respects existing flags like `--private`, feature controls, an
 
 ## Listing Mode
 
-Use the `list` subcommand to print a concise catalog of crate items instead of rendering Rust code. Each line reports the item kind and its fully qualified path:
+Use the `list` subcommand to print a concise catalog of crate items instead of rendering Rust code. Each line reports the item kind and its fully qualified path, e.g.:
 
 ```sh
-# Survey the high-level structure of tokio without emitting code
-ripdoc list tokio
+$ ripdoc list tokio
 
 crate      crate
 module     crate::sync
@@ -31,9 +30,9 @@ struct     crate::sync::Mutex
 trait      crate::io::AsyncRead
 ```
 
-Filter listing output with `--search` just like the `search` subcommand. The listing honours `--private` and feature flags, and it cannot be combined with the `raw` subcommand because the output is tabular text rather than Rust code. Each row includes the source file and line.
+Filter listing output with `--search` just like the `print` command. The listing honours `--private` and feature flags. Each row includes the source file and line.
 
-Below is a small excerpt from the `pandoc` crate showing how Ripdoc renders the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
+Below is a small excerpt from the `pandoc` crate showing how Ripdoc prints the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
 
 ### Markdown preview (default):
 
@@ -93,12 +92,12 @@ impl Pandoc {
     pub fn set_doc_class(&mut self, class: DocumentClass) -> &mut Pandoc {}
 ```
 
-Ripdoc renders Markdown by default as it is more token efficient. The output is immediately usable for feeding to LLMs.
+Ripdoc prints Markdown by default as it is more token efficient. The output is immediately usable for feeding to LLMs.
 
 ## Features
 
 - Support for both local crates and remote crates from crates.io
-- Filter output to matched items using the `search` subcommand with the `--search-spec` domain selector and `--direct-match-only` when you want to avoid container expansion
+- Filter output to matched items using the `--search` flag with the `--search-spec` domain selector and `--direct-match-only` when you want to avoid container expansion
 - Generate tabular item listings with the `list` subcommand, optionally filtered by `--search`
 - Search match highlighting for terminal output
 - Markdown-friendly output, which strips doc markers and wraps code in fenced `rust` blocks (use `--format rs` for raw Rust output)
@@ -135,8 +134,8 @@ Note: While ripdoc requires the nightly toolchain to run, you can install it usi
 Basic usage:
 
 ```sh
-# Render (default if no subcommand is provided)
-ripdoc render [TARGET]
+# Print (default if no subcommand is provided)
+ripdoc print [TARGET]
 ```
 
 See the help output for all options:
@@ -152,38 +151,39 @@ Ripdoc has a flexible target specification that tries to do the right thing in a
 ripdoc
 
 # If we're in a workspace and we have a crate mypackage
-ripdoc render mypackage
+ripdoc print mypackage
 
 # A dependency of the current project, else we fetch from crates.io
-ripdoc render serde
+ripdoc print serde
 
 # A sub-path within a crate
-ripdoc render serde::de::Deserialize
+ripdoc print serde::de::Deserialize
 
 # Path to a crate
-ripdoc render /my/path
+ripdoc print /my/path
 
 # A module within that crate
-ripdoc render /my/path::foo
+ripdoc print /my/path::foo
 
 # A crate from crates.io with a specific version
-ripdoc render serde@1.0.0
+ripdoc print serde@1.0.0
 
 # Search for "status" across names, signatures and doc comments
-ripdoc search reqwest status
+ripdoc print reqwest --search status
 
 # Search for "status" in only names and signatures
-ripdoc search reqwest status --search-spec name,signature
+ripdoc print reqwest --search status --search-spec name,signature
 
 # Search for "status" in docs only
-ripdoc search reqwest status --search-spec doc
+ripdoc print reqwest --search status --search-spec doc
 
 # List public API items
 ripdoc list serde
 
-# Render Markdown output with stripped doc comment markers
-ripdoc render serde --format markdown
+# Print Markdown output with stripped doc comment markers
+ripdoc print serde --format markdown
 ```
+
 ---
 
 ## ripdoc-core library

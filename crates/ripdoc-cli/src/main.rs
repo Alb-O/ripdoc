@@ -33,11 +33,11 @@ impl From<SearchSpec> for SearchDomain {
 
 #[derive(Args, Clone)]
 struct CommonArgs {
-	/// Render auto-implemented traits
+	/// Include auto-implemented traits
 	#[arg(short = 'i', long, default_value_t = false)]
 	auto_impls: bool,
 
-	/// Render private items
+	/// Include private items
 	#[arg(short = 'p', long, default_value_t = false)]
 	private: bool,
 
@@ -57,11 +57,11 @@ struct CommonArgs {
 	#[arg(short = 'o', long, default_value_t = false)]
 	offline: bool,
 
-	/// Enable verbose mode, showing cargo output while rendering docs
+	/// Enable verbose mode, showing cargo output while generating docs
 	#[arg(short = 'v', long, default_value_t = false)]
 	verbose: bool,
 
-	/// Select the render format (`rust` or `markdown`)
+	/// Select the output format (`rust` or `markdown`)
 	#[arg(short = 'f', long, value_enum, default_value = "markdown")]
 	format: OutputFormat,
 }
@@ -112,52 +112,42 @@ struct ListArgs {
 }
 
 #[derive(Args, Clone)]
-struct SearchArgs {
+struct PrintArgs {
 	/// Target to generate - a directory, file path, or a module name
+	#[arg(default_value = "./")]
 	target: String,
 
-	/// Search query used to filter the generated skeleton instead of rendering everything.
-	#[arg(required = false)]
-	query: Option<String>,
+	/// Search query used to filter the printed skeleton.
+	#[arg(short = 's', long)]
+	search: Option<String>,
 
 	#[command(flatten)]
 	filters: SearchFilterArgs,
 }
 
-#[derive(Args, Clone)]
-struct RenderArgs {
-	/// Target to generate - a directory, file path, or a module name
-	#[arg(default_value = "./")]
-	target: String,
-}
-
 #[derive(Subcommand, Clone)]
 enum Command {
-	/// Render a crate skeleton (default).
-	Render(RenderArgs),
+	/// Print a crate skeleton (default).
+	Print(PrintArgs),
 	/// Produce a structured item listing.
 	List(ListArgs),
-	/// Search for matching items and render the filtered skeleton.
-	Search(SearchArgs),
 	/// Emit raw rustdoc JSON.
-	Raw(RenderArgs),
+	Raw(PrintArgs),
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, override_usage = "ripdoc [OPTIONS] [COMMAND] [TARGET]")]
 /// Parsed command-line options for the ripdoc CLI.
 struct Cli {
-	#[command(flatten)]
-	common: CommonArgs,
-
-	#[arg()]
-	legacy_target: Option<String>,
-
-	#[arg(trailing_var_arg = true, hide = true)]
-	legacy_extra: Vec<String>,
-
 	#[command(subcommand)]
 	command: Option<Command>,
+
+	/// Target to generate - a directory, file path, or a module name
+	#[arg()]
+	target: Option<String>,
+
+	#[command(flatten)]
+	common: CommonArgs,
 }
 
 /// Ensure the nightly toolchain and rust-docs JSON component are present.
@@ -247,17 +237,50 @@ fn build_search_options(
 	options
 }
 
-/// Render a skeleton locally and stream it to stdout or a pager.
-fn run_render(common: &CommonArgs, target: &str, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
-	let output = rs.render(
-		target,
-		common.no_default_features,
-		common.all_features,
-		common.features.clone(),
-		common.private,
-	)?;
+/// Print a skeleton to stdout.
+fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
+	// If search query is provided, use search mode
+	if let Some(query) = &args.search {
+		let trimmed = query.trim();
+		if trimmed.is_empty() {
+			println!("Search query is empty; nothing to do.");
+			return Ok(());
+		}
 
-	println!("{output}");
+		let options = build_search_options(common, &args.filters, trimmed);
+
+		let response = rs.search(
+			&args.target,
+			common.no_default_features,
+			common.all_features,
+			common.features.clone(),
+			&options,
+		)?;
+
+		if response.results.is_empty() {
+			println!("No matches found for \"{}\".", trimmed);
+			return Ok(());
+		}
+
+		let output = highlight_matches(
+			&response.rendered,
+			trimmed,
+			args.filters.search_case_sensitive,
+		);
+
+		print!("{}", output);
+	} else {
+		// Normal print mode
+		let output = rs.render(
+			&args.target,
+			common.no_default_features,
+			common.all_features,
+			common.features.clone(),
+			common.private,
+		)?;
+
+		println!("{output}");
+	}
 
 	Ok(())
 }
@@ -388,66 +411,6 @@ fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 	result
 }
 
-/// Execute the search flow and print the filtered skeleton to stdout.
-fn run_search(common: &CommonArgs, args: &SearchArgs, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
-	if args.query.is_none() {
-		return run_cargo_search_fallback(&args.target, common.offline);
-	}
-	let trimmed = args.query.as_deref().unwrap().trim();
-	if trimmed.is_empty() {
-		println!("Search query is empty; nothing to do.");
-		return Ok(());
-	}
-
-	let options = build_search_options(common, &args.filters, trimmed);
-
-	let response = rs.search(
-		&args.target,
-		common.no_default_features,
-		common.all_features,
-		common.features.clone(),
-		&options,
-	)?;
-
-	if response.results.is_empty() {
-		println!("No matches found for \"{}\".", trimmed);
-		return Ok(());
-	}
-
-	let output = highlight_matches(
-		&response.rendered,
-		trimmed,
-		args.filters.search_case_sensitive,
-	);
-
-	print!("{}", output);
-
-	Ok(())
-}
-
-/// Fallback to `cargo search` when a query is missing.
-fn run_cargo_search_fallback(term: &str, offline: bool) -> Result<(), Box<dyn Error>> {
-	if offline {
-		return Err("--offline cannot be used with cargo search fallback. Please provide a query or re-run without --offline.".into());
-	}
-
-	let status = ProcessCommand::new("cargo")
-		.arg("search")
-		.arg(term)
-		.status()
-		.map_err(|e| format!("Failed to invoke cargo search: {e}"))?;
-
-	if !status.success() {
-		return Err(format!(
-			"`cargo search {term}` failed with exit code {}",
-			status.code().unwrap_or(-1)
-		)
-		.into());
-	}
-
-	Ok(())
-}
-
 fn main() {
 	let cli = Cli::parse();
 	if let Err(e) = check_nightly_toolchain() {
@@ -468,40 +431,27 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 	let rs = build_ripdoc(&common);
 
 	match cli.command {
-		Some(Command::Render(args)) => run_render(&common, &args.target, &rs),
+		Some(Command::Print(args)) => run_print(&common, &args, &rs),
 		Some(Command::Raw(args)) => run_raw(&common, &args.target, &rs),
 		Some(Command::List(args)) => run_list(&common, &args, &rs),
-		Some(Command::Search(args)) => run_search(&common, &args, &rs),
 		None => {
-			let default_target = cli.legacy_target.unwrap_or_else(|| "./".to_string());
-			if !cli.legacy_extra.is_empty() {
-				let mut extras = cli.legacy_extra;
-				if extras.first().is_some_and(|s| s == "search") {
-					extras.remove(0);
-				}
-				let query = extras.join(" ").trim().to_string();
-				if query.is_empty() {
-					return Err("A search query is required when trailing arguments are provided without a subcommand.".into());
-				}
-				let search_args = SearchArgs {
-					target: default_target,
-					query: Some(query),
-					filters: SearchFilterArgs::default(),
-				};
-				run_search(&common, &search_args, &rs)
-			} else {
-				run_render(&common, &default_target, &rs)
-			}
+			let target = cli.target.unwrap_or_else(|| "./".to_string());
+			let default_args = PrintArgs {
+				target,
+				search: None,
+				filters: SearchFilterArgs::default(),
+			};
+			run_print(&common, &default_args, &rs)
 		}
 	}
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]
 /// Output formats the CLI can emit.
 enum OutputFormat {
-	/// Render formatted Rust code (default).
+	/// Print formatted Rust code.
 	#[value(alias = "rs")]
 	Rust,
-	/// Emit Markdown with stripped documentation markers.
+	/// Print Markdown with stripped documentation markers (default).
 	#[value(alias = "md")]
 	Markdown,
 }
