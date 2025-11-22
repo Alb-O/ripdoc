@@ -6,6 +6,8 @@
 
 /// Error helpers for the core API.
 pub mod error;
+/// Hierarchical tree structure for organizing list output.
+pub mod list_tree;
 /// Search and indexing utilities.
 pub mod search;
 use ripdoc_cargo::resolve_target;
@@ -15,6 +17,7 @@ pub use ripdoc_render::{RenderFormat, Renderer};
 use rustdoc_types::Crate;
 
 pub use crate::error::Result;
+pub use crate::list_tree::{ListTreeNode, build_list_tree};
 pub use crate::search::{
 	ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse, SourceLocation,
 };
