@@ -348,10 +348,17 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 	for entry in listings {
 		let label = entry.kind.label();
 		let location = format_source_location(entry.source.as_ref());
-		buffer.push_str(&format!(
+		let line = format!(
 			"{label:<label_width$} {path:<path_width$} {location}\n",
 			path = entry.path
-		));
+		);
+		let highlighted_line = if let Some(ref query) = trimmed_query {
+			highlight_matches(&line, query, args.filters.search_case_sensitive)
+		} else {
+			line
+		};
+
+		buffer.push_str(&highlighted_line);
 	}
 
 	print!("{}", buffer);
