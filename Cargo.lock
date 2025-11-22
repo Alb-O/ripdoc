@@ -697,6 +697,7 @@ dependencies = [
  "owo-colors",
  "ripdoc-cargo",
  "ripdoc-core",
+ "serde_json",
  "subsecond",
  "tempfile",
 ]
@@ -711,6 +712,7 @@ dependencies = [
  "ripdoc-render",
  "rust-format",
  "rustdoc-types",
+ "serde",
  "serde_json",
  "tempfile",
 ]

@@ -345,6 +345,15 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 		return Ok(());
 	}
 
+	// Use JSON format if requested
+	if common.format == OutputFormat::Json {
+		use ripdoc_core::build_list_tree;
+		let tree = build_list_tree(&listings);
+		let json = serde_json::to_string_pretty(&tree)?;
+		println!("{json}");
+		return Ok(());
+	}
+
 	let label_width = listings
 		.iter()
 		.map(|entry| entry.kind.label().len())
@@ -549,7 +558,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 		Command::Readme(args) => run_readme(&args.common, &args),
 	}
 }
-#[derive(Debug, Clone, Copy, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
 /// Output formats the CLI can emit.
 enum OutputFormat {
 	/// Print formatted Rust code.
@@ -558,6 +567,8 @@ enum OutputFormat {
 	/// Print Markdown with stripped documentation markers (default).
 	#[value(alias = "md")]
 	Markdown,
+	/// Print JSON output (only for list command).
+	Json,
 }
 
 impl From<OutputFormat> for RenderFormat {
@@ -565,6 +576,8 @@ impl From<OutputFormat> for RenderFormat {
 		match format {
 			OutputFormat::Rust => RenderFormat::Rust,
 			OutputFormat::Markdown => RenderFormat::Markdown,
+			// JSON format doesn't have a RenderFormat equivalent; it's only for list output
+			OutputFormat::Json => RenderFormat::Markdown,
 		}
 	}
 }

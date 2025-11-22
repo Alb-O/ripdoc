@@ -67,7 +67,8 @@ impl SearchOptions {
 }
 
 /// Classified kind associated with a search result.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SearchItemKind {
 	/// Synthetic crate root module.
 	Crate,
@@ -168,7 +169,7 @@ pub struct SearchResponse {
 }
 
 /// Source location associated with an item.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceLocation {
 	/// Absolute path to the source file when available.
 	pub path: String,
@@ -178,8 +179,19 @@ pub struct SourceLocation {
 	pub column: Option<usize>,
 }
 
+impl SourceLocation {
+	/// Format the source location as a compact string (e.g., "path/to/file.rs:42" or "path/to/file.rs:42:10").
+	pub fn to_compact_string(&self) -> String {
+		match (self.line, self.column) {
+			(Some(line), Some(col)) => format!("{}:{}:{}", self.path, line, col),
+			(Some(line), None) => format!("{}:{}", self.path, line),
+			_ => self.path.clone(),
+		}
+	}
+}
+
 /// Lightweight record describing an item for list mode output.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ListItem {
 	/// Kind classification for the item.
 	pub kind: SearchItemKind,

@@ -16,7 +16,8 @@ ripdoc-cargo = { workspace = true }
 ripdoc-render = { workspace = true }
 bitflags = { version = "2.10", default-features = false }
 rustdoc-types = { version = "0.56", default-features = false }
-serde_json = { version = "1.0", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
