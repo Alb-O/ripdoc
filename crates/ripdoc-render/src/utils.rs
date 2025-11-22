@@ -33,6 +33,71 @@ pub fn escape_path(path: &str) -> String {
 		.join("::")
 }
 
+/// Standard gap marker line used to indicate skipped items.
+pub const GAP_MARKER: &str = "// ...";
+
+/// Check whether the output already starts with a gap marker (ignoring indentation and leading
+/// blank lines).
+pub fn starts_with_gap(output: &str) -> bool {
+	output
+		.lines()
+		.skip_while(|line| line.trim().is_empty())
+		.next()
+		.map(|line| line.trim_start() == GAP_MARKER)
+		.unwrap_or(false)
+}
+
+/// Check whether the current output already ends with a gap marker (ignoring indentation).
+pub fn ends_with_gap(output: &str) -> bool {
+	output
+		.trim_end_matches('\n')
+		.rsplit('\n')
+		.next()
+		.map(|line| line.trim_start() == GAP_MARKER)
+		.unwrap_or(false)
+}
+
+/// Collapse consecutive gap markers to a single instance.
+pub fn dedup_gap_markers(output: &str) -> String {
+	let mut deduped = String::with_capacity(output.len());
+	let mut in_gap_block = false;
+	let mut emitted_blank_after_gap = false;
+
+	for line in output.lines() {
+		let is_gap = line.trim_start() == GAP_MARKER;
+		let is_blank = line.trim().is_empty();
+
+		if is_gap {
+			if in_gap_block {
+				continue;
+			}
+			in_gap_block = true;
+			emitted_blank_after_gap = false;
+			deduped.push_str(line);
+			deduped.push('\n');
+			continue;
+		}
+
+		if in_gap_block {
+			if is_blank {
+				if emitted_blank_after_gap {
+					continue;
+				}
+				emitted_blank_after_gap = true;
+				deduped.push_str(line);
+				deduped.push('\n');
+				continue;
+			}
+			in_gap_block = false;
+		}
+
+		deduped.push_str(line);
+		deduped.push('\n');
+	}
+
+	deduped
+}
+
 /// Classification describing how a filter string matches a path.
 #[derive(Debug, PartialEq)]
 pub enum FilterMatch {

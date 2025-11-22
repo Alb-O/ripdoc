@@ -2,7 +2,7 @@ use rustdoc_types::{Id, Item, ItemEnum, StructKind, VariantKind, Visibility};
 
 use super::impls::{DERIVE_TRAITS, render_impl, should_render_impl};
 use super::macros::{render_macro, render_proc_macro};
-use super::state::RenderState;
+use super::state::{GapController, RenderState};
 use super::utils::{escape_path, must_get, ppush};
 use crate::syntax::*;
 
@@ -197,10 +197,20 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 	}
 
 	let module = extract_item!(item, ItemEnum::Module);
+	let gaps = GapController::new("");
+	gaps.begin_section(state);
 
 	for item_id in &module.items {
-		let item = must_get(state.crate_data, item_id);
-		output.push_str(&render_item(state, &path_prefix, item, false));
+		let child_item = must_get(state.crate_data, item_id);
+		
+		let rendered = render_item(state, &path_prefix, child_item, false);
+		if !rendered.is_empty() {
+			gaps.emit_if_needed(state, &mut output, &rendered);
+			output.push_str(&rendered);
+		} else {
+			// Item was filtered out, mark it as skipped
+			state.mark_skipped();
+		}
 	}
 
 	output.push_str("}\n\n");
@@ -219,9 +229,14 @@ pub fn render_struct(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 
 	let generics = render_generics(&struct_.generics);
 	let where_clause = render_where_clause(&struct_.generics);
+	
+	// Collect inline traits first while we have immutable access
+	let inline_traits: Vec<String> = collect_inline_traits(state, &struct_.impls)
+		.into_iter()
+		.map(|s| s.to_string())
+		.collect();
+	
 	let ctx = StructRenderContext::new(state, item, generics, where_clause);
-
-	let inline_traits = collect_inline_traits(state, &struct_.impls);
 
 	let rendered_struct = match &struct_.kind {
 		StructKind::Unit => Some(render_struct_unit(&ctx)),
@@ -304,7 +319,7 @@ fn render_struct_tuple(
 	}
 }
 
-fn render_struct_plain(state: &RenderState, ctx: &StructRenderContext, fields: &[Id]) -> String {
+fn render_struct_plain(state: &mut RenderState, ctx: &StructRenderContext, fields: &[Id]) -> String {
 	let mut output = format!(
 		"{}struct {}{}{} {{\n",
 		render_vis(ctx.item()),
@@ -312,11 +327,16 @@ fn render_struct_plain(state: &RenderState, ctx: &StructRenderContext, fields: &
 		ctx.generics(),
 		ctx.where_clause()
 	);
+	let gaps = GapController::new("    ");
+	gaps.begin_section(state);
 
 	for field in fields {
 		let rendered = render_struct_field(state, field, ctx.force_children());
 		if !rendered.is_empty() {
+			gaps.emit_if_needed(state, &mut output, &rendered);
 			output.push_str(&rendered);
+		} else {
+			state.mark_skipped();
 		}
 	}
 
@@ -362,14 +382,18 @@ pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 		return String::new();
 	}
 
+	// Collect inline traits first while we have immutable access
+	let inline_traits: Vec<String> = collect_inline_traits(state, &enum_.impls)
+		.into_iter()
+		.map(|s| s.to_string())
+		.collect();
+
 	let ctx = EnumRenderContext::new(
 		state,
 		item,
 		render_generics(&enum_.generics),
 		render_where_clause(&enum_.generics),
 	);
-
-	let inline_traits = collect_inline_traits(state, &enum_.impls);
 
 	if !inline_traits.is_empty() {
 		output.push_str(&format!("#[derive({})]\n", inline_traits.join(", ")));
@@ -382,9 +406,12 @@ pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 		ctx.generics(),
 		ctx.where_clause()
 	));
+	let gaps = GapController::new("    ");
+	gaps.begin_section(state);
 
 	for variant_id in &enum_.variants {
 		if !ctx.should_render_variant(state, variant_id) {
+			state.mark_skipped();
 			continue;
 		}
 
@@ -392,7 +419,10 @@ pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 		let include_variant_fields = ctx.include_variant_fields(state, variant_item);
 		let rendered = render_enum_variant(state, &ctx, variant_item, include_variant_fields);
 		if !rendered.is_empty() {
+			gaps.emit_if_needed(state, &mut output, &rendered);
 			output.push_str(&rendered);
+		} else {
+			state.mark_skipped();
 		}
 	}
 
@@ -490,11 +520,29 @@ pub fn render_use(state: &mut RenderState, path_prefix: &str, item: &Item) -> St
 	match resolution {
 		UseResolution::Items(items) => {
 			let mut output = String::new();
+			let gaps = GapController::new("");
+			gaps.begin_section(state);
+			let mut any_rendered = false;
+
+			// Render all expanded items as a single group so we don't emit gap
+			// markers between items that originated from the same `use`.
 			for item_id in items {
 				if let Some(item) = state.crate_data.index.get(&item_id) {
-					output.push_str(&render_item(state, path_prefix, item, true));
+					let rendered = render_item(state, path_prefix, item, true);
+					if !rendered.is_empty() {
+						gaps.emit_if_needed(state, &mut output, &rendered);
+						output.push_str(&rendered);
+						any_rendered = true;
+					} else if !any_rendered {
+						// Track that we skipped something before the first render.
+						state.mark_skipped();
+					}
 				}
 			}
+			// Prevent skipped items inside the expansion from queuing another
+			// gap marker for the parent module.
+			state.clear_pending_gap();
+
 			output
 		}
 		UseResolution::Alias { source, alias } => {

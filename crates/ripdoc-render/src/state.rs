@@ -1,8 +1,50 @@
 use rustdoc_types::{Crate, Id, Item};
 
 use super::core::{RenderSelection, Renderer};
-use super::utils::{FilterMatch, must_get, ppush};
+use super::utils::{must_get, ppush, FilterMatch, GAP_MARKER};
+use super::utils::{ends_with_gap, starts_with_gap};
 use crate::error::{Result, RipdocError};
+
+/// Tracks whether a gap marker should be inserted before the next rendered item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GapState {
+	/// No pending gap marker.
+	Clear,
+	/// Items were skipped and a gap marker should be emitted before the next render.
+	Pending,
+}
+
+/// Helper that centralizes gap marker insertion rules for renderers.
+pub struct GapController<'a> {
+	indent: &'a str,
+}
+
+impl<'a> GapController<'a> {
+	/// Create a new controller using the provided indentation prefix.
+	pub fn new(indent: &'a str) -> Self {
+		Self { indent }
+	}
+
+	/// Initialize any section-level tracking before iterating children.
+	pub fn begin_section(&self, _state: &mut RenderState<'_, '_>) {
+		// Reserved for future section-level behavior; intentionally a no-op today.
+	}
+
+	/// Emit a gap marker if state indicates one is pending.
+	pub fn emit_if_needed(
+		&self,
+		state: &mut RenderState<'_, '_>,
+		output: &mut String,
+		next_block: &str,
+	) {
+		state.emit_gap_if_needed(output, self.indent, next_block);
+	}
+
+	/// Build a child indentation prefix relative to the current controller.
+	pub fn child_prefix_for(&self, indent: &str) -> String {
+		format!("{}{}", self.indent, indent)
+	}
+}
 
 /// Mutable rendering context shared across helper functions.
 pub struct RenderState<'a, 'b> {
@@ -12,6 +54,8 @@ pub struct RenderState<'a, 'b> {
 	pub crate_data: &'b Crate,
 	/// Tracks whether any item matched the configured filter.
 	pub filter_matched: bool,
+	/// Tracks whether items were skipped (used for gap markers in search mode).
+	pub gap_state: GapState,
 }
 
 impl<'a, 'b> RenderState<'a, 'b> {
@@ -21,6 +65,7 @@ impl<'a, 'b> RenderState<'a, 'b> {
 			config,
 			crate_data,
 			filter_matched: false,
+			gap_state: GapState::Clear,
 		}
 	}
 
@@ -131,5 +176,35 @@ impl<'a, 'b> RenderState<'a, 'b> {
 			self.filter_match(path_prefix, item),
 			FilterMatch::Hit | FilterMatch::Suffix
 		)
+	}
+
+	/// Mark that an item was skipped (not rendered).
+	pub fn mark_skipped(&mut self) {
+		if self.selection().is_some() {
+			self.gap_state = GapState::Pending;
+		}
+	}
+
+	fn should_emit_gap(&self) -> bool {
+		self.selection().is_some() && matches!(self.gap_state, GapState::Pending)
+	}
+
+	fn emit_gap_if_needed(&mut self, output: &mut String, indent: &str, next_block: &str) {
+		if !self.should_emit_gap() {
+			return;
+		}
+
+		if !ends_with_gap(output) && !starts_with_gap(next_block) {
+			output.push_str(indent);
+			output.push_str(GAP_MARKER);
+			output.push_str("\n");
+		}
+
+		self.gap_state = GapState::Clear;
+	}
+
+	/// Reset any pending gap marker, used when inner renderers handle their own gaps.
+	pub fn clear_pending_gap(&mut self) {
+		self.gap_state = GapState::Clear;
 	}
 }

@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use rust_format::{Config, Formatter, RustFmt};
 use rustdoc_types::{Crate, Id};
 
+use super::utils::dedup_gap_markers;
 use crate::error::Result;
 use crate::markdown;
 
@@ -134,11 +135,16 @@ impl Renderer {
 	}
 
 	fn render_rust(&self, raw_output: &str) -> Result<String> {
-		Ok(self.formatter.format_str(raw_output)?)
+		let formatted = self.formatter.format_str(raw_output)?;
+		Ok(self.apply_postprocessors(formatted))
 	}
 
 	fn render_markdown(&self, raw_output: String) -> Result<String> {
 		let formatted = self.render_rust(&raw_output)?;
 		Ok(markdown::render_markdown(&formatted))
+	}
+
+	fn apply_postprocessors(&self, rendered: String) -> String {
+		dedup_gap_markers(&rendered)
 	}
 }

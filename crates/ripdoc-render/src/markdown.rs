@@ -63,6 +63,7 @@ fn rust_to_markdown(source: &str) -> String {
 fn strip_outer_module(source: &str) -> String {
 	let trimmed = source.trim();
 	let mut lines: Vec<&str> = trimmed.lines().collect();
+
 	if lines.len() >= 2 {
 		let first = lines.first().unwrap().trim();
 		let last = lines.last().unwrap().trim();
@@ -72,6 +73,20 @@ fn strip_outer_module(source: &str) -> String {
 			return format!("{}\n", lines.join("\n"));
 		}
 	}
+
+	// Handle degenerate single-line modules like `pub mod foo {}` which are
+	// emitted when there are no visible items in the crate.
+	if lines.len() == 1 {
+		let first = lines[0].trim();
+		if first.starts_with("pub mod ") && first.ends_with('}') {
+			if let (Some(open), Some(close)) = (first.find('{'), first.rfind('}')) {
+				if first[open + 1..close].trim().is_empty() {
+					return String::new();
+				}
+			}
+		}
+	}
+
 	trimmed.to_string()
 }
 

@@ -1,6 +1,6 @@
 use rustdoc_types::{Impl, Item, ItemEnum, Type, Visibility};
 
-use super::state::RenderState;
+use super::state::{GapController, RenderState};
 use super::utils::ppush;
 use crate::syntax::*;
 
@@ -95,6 +95,8 @@ pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 
 	let path_prefix = ppush(path_prefix, &render_type(&impl_.for_));
 	let mut has_content = false;
+	let gaps = GapController::new("    ");
+	gaps.begin_section(state);
 	for item_id in &impl_.items {
 		if let Some(item) = state.crate_data.index.get(item_id) {
 			let is_trait_impl = impl_.trait_.is_some();
@@ -103,9 +105,14 @@ pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 			{
 				let rendered = render_impl_item(state, &path_prefix, item, expand_children);
 				if !rendered.is_empty() {
+					gaps.emit_if_needed(state, &mut output, &rendered);
 					output.push_str(&rendered);
 					has_content = true;
+				} else {
+					state.mark_skipped();
 				}
+			} else {
+				state.mark_skipped();
 			}
 		}
 	}
@@ -144,7 +151,7 @@ pub fn render_impl_item(
 }
 
 /// Render a trait definition.
-pub fn render_trait(state: &RenderState, item: &Item) -> String {
+pub fn render_trait(state: &mut RenderState, item: &Item) -> String {
 	let mut output = docs(item);
 
 	let trait_ = extract_item!(item, ItemEnum::Trait);
@@ -175,11 +182,21 @@ pub fn render_trait(state: &RenderState, item: &Item) -> String {
 		bounds,
 		where_clause
 	));
+	let gaps = GapController::new("    ");
+	gaps.begin_section(state);
 
 	for item_id in &trait_.items {
 		if selection.includes_child(state, item_id) {
 			let item = super::utils::must_get(state.crate_data, item_id);
-			output.push_str(&render_trait_item(state, item, &selection));
+			let rendered = render_trait_item(state, item, &selection);
+			if !rendered.is_empty() {
+				gaps.emit_if_needed(state, &mut output, &rendered);
+				output.push_str(&rendered);
+			} else {
+				state.mark_skipped();
+			}
+		} else {
+			state.mark_skipped();
 		}
 	}
 

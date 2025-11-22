@@ -3,6 +3,7 @@
 Feel free to add more intermediate sub-tasks as needed.
 
 - [x] organise into subcommands
+- [x] show `// ...` between search results with large distance appart
 - [ ] functionality/subcommands for fetching:
   - [ ] examples
   - [ ] READMEs
