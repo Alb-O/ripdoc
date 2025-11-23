@@ -17,7 +17,7 @@ pub use ripdoc_render::{RenderFormat, Renderer};
 use rustdoc_types::Crate;
 
 pub use crate::error::Result;
-pub use crate::list_tree::{ListTreeNode, build_list_tree};
+pub use crate::list_tree::{CompactListTreeNode, ListTreeNode, build_list_tree};
 pub use crate::search::{
 	ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse, SourceLocation,
 };

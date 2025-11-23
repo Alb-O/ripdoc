@@ -108,6 +108,10 @@ struct ListArgs {
 	#[arg(short = 's', long)]
 	search: Option<String>,
 
+	/// Select the output format (toon, json, rust, or markdown)
+	#[arg(long = "list-format", value_enum, default_value = "toon")]
+	list_format: OutputFormat,
+
 	#[command(flatten)]
 	filters: SearchFilterArgs,
 
@@ -345,12 +349,22 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 		return Ok(());
 	}
 
-	// Use JSON format if requested
-	if common.format == OutputFormat::Json {
+	// Use JSON or TOON format if requested
+	if args.list_format == OutputFormat::Json || args.list_format == OutputFormat::Toon {
 		use ripdoc_core::build_list_tree;
 		let tree = build_list_tree(&listings);
-		let json = serde_json::to_string_pretty(&tree)?;
-		println!("{json}");
+
+		if args.list_format == OutputFormat::Json {
+			// JSON keeps separate fields for use with jq and other tools
+			let json = serde_json::to_string_pretty(&tree)?;
+			println!("{json}");
+		} else {
+			// TOON format uses compact representation for maximum token efficiency
+			use ripdoc_core::CompactListTreeNode;
+			let compact_tree = CompactListTreeNode::from_nodes(&tree);
+			let toon = toon_format::encode_default(&compact_tree)?;
+			println!("{toon}");
+		}
 		return Ok(());
 	}
 
@@ -569,6 +583,8 @@ enum OutputFormat {
 	Markdown,
 	/// Print JSON output (only for list command).
 	Json,
+	/// Print TOON format output (only for list command).
+	Toon,
 }
 
 impl From<OutputFormat> for RenderFormat {
@@ -576,8 +592,8 @@ impl From<OutputFormat> for RenderFormat {
 		match format {
 			OutputFormat::Rust => RenderFormat::Rust,
 			OutputFormat::Markdown => RenderFormat::Markdown,
-			// JSON format doesn't have a RenderFormat equivalent; it's only for list output
-			OutputFormat::Json => RenderFormat::Markdown,
+			// JSON and TOON formats don't have RenderFormat equivalents; they're only for list output
+			OutputFormat::Json | OutputFormat::Toon => RenderFormat::Markdown,
 		}
 	}
 }

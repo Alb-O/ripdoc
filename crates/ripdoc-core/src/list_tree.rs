@@ -20,6 +20,20 @@ pub struct ListTreeNode {
 	pub children: Vec<ListTreeNode>,
 }
 
+/// A compact hierarchical tree node optimized for TOON format.
+/// Combines name and kind into a single field for maximum token efficiency.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct CompactListTreeNode {
+	/// Combined identifier in format "name'kind" (e.g., "pandoc'crate", "EmailObfuscation'enum").
+	pub id: String,
+	/// Source location for the item if available (format: "path/to/file.rs:line" or "path/to/file.rs:line:col").
+	#[serde(skip_serializing_if = "Option::is_none", rename = "src")]
+	pub source: Option<String>,
+	/// Child items nested under this item.
+	#[serde(skip_serializing_if = "Vec::is_empty", default)]
+	pub children: Vec<CompactListTreeNode>,
+}
+
 impl ListTreeNode {
 	/// Create a new tree node.
 	pub fn new(name: String, kind: SearchItemKind, source: Option<String>) -> Self {
@@ -29,6 +43,22 @@ impl ListTreeNode {
 			source,
 			children: Vec::new(),
 		}
+	}
+
+	/// Convert to compact format for TOON output (combines name and kind into single "id" field).
+	pub fn to_compact(&self) -> CompactListTreeNode {
+		CompactListTreeNode {
+			id: format!("{}'{}", self.name, self.kind.label()),
+			source: self.source.clone(),
+			children: self.children.iter().map(|c| c.to_compact()).collect(),
+		}
+	}
+}
+
+impl CompactListTreeNode {
+	/// Convert a list of standard tree nodes to compact format.
+	pub fn from_nodes(nodes: &[ListTreeNode]) -> Vec<CompactListTreeNode> {
+		nodes.iter().map(|n| n.to_compact()).collect()
 	}
 }
 
