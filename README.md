@@ -106,8 +106,8 @@ ripdoc readme tokio
 
 ## Other Features
 
-- Character ihghlighting for query hits
-- Print raw JSON data jor usage with `jq` or similar
+- Character highlighting for query hits
+- Print raw JSON data for usage with `jq` or similar
 - Cache rustdoc JSON on disk automatically (override location via `RIPDOC_CACHE_DIR`)
 
 ---
@@ -143,7 +143,7 @@ Ripdoc has a flexible target specification that tries to do the right thing in a
 
 ```sh
 # Current project
-ripdoc
+ripdoc print
 
 # If we're in a workspace and we have a crate mypackage
 ripdoc print mypackage
