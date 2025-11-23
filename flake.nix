@@ -1,5 +1,5 @@
 {
-  description = "Ripdoc generates skeletonized outlines of Rust crates.";
+  description = "Query Rust docs and crate API from the command line";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

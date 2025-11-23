@@ -7,5 +7,10 @@ pub fn render_path(path: &Path) -> String {
 		.as_ref()
 		.map(|args| super::generics::render_generic_args(args))
 		.unwrap_or_default();
-	format!("{}{}", path.path.replace("$super::", ""), args)
+	let cleaned_path = path
+		.path
+		.replace("$super::", "")
+		.replace("$crate::__private::core::", "")
+		.replace("$crate::", "");
+	format!("{}{}", cleaned_path, args)
 }

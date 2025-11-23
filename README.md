@@ -129,7 +129,7 @@ rustup toolchain install nightly
 Basic usage:
 
 ```sh
-# Print (default if no subcommand is provided)
+# Prints the entire public API of the target crate
 ripdoc print [TARGET]
 ```
 
