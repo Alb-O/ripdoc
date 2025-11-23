@@ -8,18 +8,18 @@ repository.workspace = true
 description.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [dependencies]
+bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
 cargo_metadata = { version = "0.23", default-features = false }
 cargo_toml = { version = "0.22", default-features = false }
+dirs = { version = "6.0", default-features = false }
+once_cell.workspace = true
+rustdoc-json = { version = "0.9", default-features = false }
+rustdoc-types.workspace = true
 semver = { version = "1.0", default-features = false }
-serde_json = { version = "1.0", default-features = false }
+serde_json.workspace = true
 tempfile = { version = "3.23", default-features = false }
 ureq = { version = "3.1" }
-rustdoc-json = { version = "0.9", default-features = false }
-rustdoc-types = { version = "0.56", default-features = false }
-once_cell = { version = "1.21", default-features = false }
-bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
-dirs = { version = "6.0", default-features = false }
+
+[lints]
+workspace = true

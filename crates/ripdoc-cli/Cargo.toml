@@ -8,30 +8,6 @@ repository.workspace = true
 description.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
-[dependencies]
-ripdoc-core = { workspace = true }
-ripdoc-cargo = { workspace = true }
-clap = { version = "4.5", features = ["derive"] }
-owo-colors = "4.2"
-serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
-subsecond = { version = "0.7", optional = true }
-anyhow = { version = "1.0", optional = true }
-notify = { version = "8.2", optional = true }
-tempfile = { version = "3.12", optional = true }
-libloading = { version = "0.9", optional = true }
-
-[features]
-hot-interpreter = [
-	"dep:anyhow",
-	"dep:libloading",
-	"dep:notify",
-	"dep:subsecond",
-	"dep:tempfile",
-]
-
 [[bin]]
 name = "ripdoc"
 path = "src/main.rs"
@@ -40,3 +16,27 @@ path = "src/main.rs"
 name = "hotinterp"
 path = "src/poc/hotinterp/main.rs"
 required-features = ["hot-interpreter"]
+
+[features]
+hot-interpreter = [
+    "dep:anyhow",
+    "dep:libloading",
+    "dep:notify",
+    "dep:subsecond",
+    "dep:tempfile",
+]
+
+[dependencies]
+anyhow = { version = "1.0", optional = true }
+clap = { version = "4.5", features = ["derive"] }
+libloading = { version = "0.9", optional = true }
+notify = { version = "8.2", optional = true }
+owo-colors = "4.2"
+ripdoc-cargo = { workspace = true }
+ripdoc-core = { workspace = true }
+serde_json.workspace = true
+subsecond = { version = "0.7", optional = true }
+tempfile = { version = "3.12", optional = true }
+
+[lints]
+workspace = true

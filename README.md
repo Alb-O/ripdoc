@@ -1,38 +1,40 @@
 # Ripdoc
 
-Ripdoc produces a syntactical outline of a crate's public API and documentation. The CLI provides on-demand access to these resources from any source (local filesystem or through [crates.io](https://crates.io)), perfect for AI agent usage.
+Ripdoc prints a syntactical outline of a crate's public API and documentation. The CLI provides on-demand access to these resources from any source (local filesystem or through [crates.io](https://crates.io)), perfect for AI agent usage.
+
+See [AGENTS.md](./AGENTS.md) for an example of context & usage to provide to AI agents. There is no MCP server for this tool, as I think MCP is a garbage spec and on it's way out soon as hinted by Anthropic themselves.
 
 ## Search Mode
 
-Use the `--search` flag with the `print` command to focus on specific items instead of printing an entire crate. The query runs across multiple domains and returns the public API containing the matches and their ancestors for context.
+Use the `--search`|`-s` flag with the `print` command to query specific items instead of printing an entire crate. The query returns public API and their ancestors for context.
 
 ```sh
 # Show methods and fields matching "status" within the reqwest crate
 ripdoc print reqwest --search status --search-spec name,signature
 ```
 
-By default the query matches the name, doc, and signature domains with case-insensitive comparisons. Include the optional `path` domain when you need canonical path matches by passing `--search-spec name,path`, or use `--search-spec doc` to inspect documentation only. Combine with `--search-case-sensitive` to require exact letter case.
+By default the query matches the name, doc, and signature domains, case-insensitively.
 
 Add `--direct-match-only`|`-d` when you want container matches (modules, structs, traits) to stay collapsed and show only the exact hits.
-
-The search output respects existing flags like `--private`, feature controls, and syntax highlighting options.
 
 ## Listing Mode
 
 Use the `list` subcommand to print a concise catalog of crate items instead of rendering Rust code. Each line reports the item kind and its fully qualified path, e.g.:
 
 ```sh
-$ ripdoc list tokio
+ripdoc list tokio
 
-crate      crate
-module     crate::sync
-struct     crate::sync::Mutex
-trait      crate::io::AsyncRead
+crate  tokio         tokio-1.48.0/src/lib.rs:1
+module tokio::io     tokio-1.48.0/src/io/mod.rs:1
+module tokio::net    tokio-1.48.0/src/net/mod.rs:1
+module tokio::task   tokio-1.48.0/src/task/mod.rs:1
+module tokio::stream tokio-1.48.0/src/lib.rs:640
+macro  tokio::pin    tokio-1.48.0/src/macros/pin.rs:125
 ```
 
-Filter listing output with `--search` just like the `print` command. The listing honours `--private` and feature flags. Each row includes the source file and line.
+Filter listing output with `--search`. The listing honours `--private` and feature flags. Each row includes the source file and line.
 
-Below is a small excerpt from the `pandoc` crate showing how Ripdoc prints the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
+Below is an example from the `pandoc` crate showing how Ripdoc prints the same snippet in Markdown (default) and in the raw Rust skeleton (`--format rs`):
 
 ### Markdown preview (default):
 
@@ -94,15 +96,18 @@ impl Pandoc {
 
 Ripdoc prints Markdown by default as it is more token efficient. The output is immediately usable for feeding to LLMs.
 
-## Features
+## Print READMEs
 
-- Support for both local crates and remote crates from crates.io
-- Filter output to matched items using the `--search` flag with the `--search-spec` domain selector and `--direct-match-only` when you want to avoid container expansion
-- Generate tabular item listings with the `list` subcommand, optionally filtered by `--search`
-- Search match highlighting for terminal output
-- Markdown-friendly output, which strips doc markers and wraps code in fenced `rust` blocks (use `--format rs` for raw Rust output)
-- Optionally include private items and auto-implemented traits
-- Support for querying against feature flags and version specification
+In addition to printing crate API, Ripdoc can also fetch and print the README file for a crate.
+
+```sh
+ripdoc readme tokio
+```
+
+## Other Features
+
+- Character ihghlighting for query hits
+- Print raw JSON data jor usage with `jq` or similar
 - Cache rustdoc JSON on disk automatically (override location via `RIPDOC_CACHE_DIR`)
 
 ---
@@ -118,16 +123,6 @@ Install the nightly toolchain:
 ```sh
 rustup toolchain install nightly
 ```
-
-## Installation
-
-To install Ripdoc, run:
-
-```sh
-cargo install ripdoc
-```
-
-Note: While ripdoc requires the nightly toolchain to run, you can install it using any toolchain.
 
 ## Usage
 
@@ -186,29 +181,10 @@ ripdoc print serde --format markdown
 
 ---
 
-## ripdoc-core library
-
-`ripdoc-core` is a library that can be integrated into other Rust projects to provide Ripdoc functionality.
-
-An example of using `ripdoc-core` in your Rust code:
-
-```rust
-use ripdoc_core::Ripdoc;
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ripdoc = Ripdoc::new().with_silent(true);
-    let rendered = ripdoc.render(
-        "serde",           // target
-        false,             // no_default_features
-        false,             // all_features
-        Vec::new(),        // features
-        false              // private_items
-    )?;
-    println!("{}", rendered);
-    Ok(())
-}
-```
-
 ## Attribution
 
 This crate is a forked and re-worked version of [cortesi's `ruskel`](https://github.com/cortesi/ruskel). Much of its core code is still in use.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

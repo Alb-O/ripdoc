@@ -26,7 +26,7 @@
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
           pname = "ripdoc";
-          version = "0.1.0";
+          version = "0.2.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock = {
             lockFile = ./Cargo.lock;
@@ -64,6 +64,7 @@
             buildInputs = [
               openssl
               pkg-config
+              cargo-sort
               (rust-bin.nightly.latest.default.override { extensions = [ "rust-src" ]; })
             ];
 

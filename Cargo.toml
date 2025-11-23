@@ -1,8 +1,12 @@
+
+[workspace]
+resolver = "3"
+members = ["crates/*"]
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 authors = ["Albert O'Shea <albertoshea2@gmail.com>"]
-description = "Query and outline Rust documentation from the command line"
+description = "Query Rust docs and crate API from the command line"
 license = "MIT"
 repository = "https://github.com/Alb-O/ripdoc"
 readme = "README.md"
@@ -11,15 +15,15 @@ keywords = ["docs", "documentation", "outline", "cli"]
 [workspace.lints.rust]
 missing_docs = "warn"
 
-[workspace]
-resolver = "3"
-members = ["crates/*"]
-
 [workspace.dependencies]
-ripdoc-cli = { path = "crates/ripdoc-cli" }
-ripdoc-core = { path = "crates/ripdoc-core" }
-ripdoc-cargo = { path = "crates/ripdoc-cargo" }
-ripdoc-render = { path = "crates/ripdoc-render" }
+once_cell = { version = "1.21", default-features = false }
+ripdoc-cargo = { path = "crates/ripdoc-cargo", version = "*"}
+ripdoc-cli = { path = "crates/ripdoc-cli", version = "*"}
+ripdoc-core = { path = "crates/ripdoc-core", version = "*"}
+ripdoc-render = { path = "crates/ripdoc-render", version = "*"}
+rust-format = { version = "0.3", default-features = false }
+rustdoc-types = { version = "0.57", default-features = false }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 
 [patch.crates-io]
 rustdoc-json = { git = "https://github.com/Alb-O/cargo-public-api" }
