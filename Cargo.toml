@@ -1,8 +1,5 @@
-
-[workspace]
-resolver = "3"
-members = ["crates/*"]
-[workspace.package]
+[package]
+name = "ripdoc"
 version = "0.2.0"
 edition = "2024"
 authors = ["Albert O'Shea <albertoshea2@gmail.com>"]
@@ -12,18 +9,60 @@ repository = "https://github.com/Alb-O/ripdoc"
 readme = "README.md"
 keywords = ["docs", "documentation", "outline", "cli"]
 
-[workspace.lints.rust]
-missing_docs = "warn"
+[[bin]]
+name = "ripdoc"
+path = "src/main.rs"
 
-[workspace.dependencies]
-once_cell = { version = "1.21", default-features = false }
-ripdoc-cargo = { path = "crates/ripdoc-cargo", version = "*"}
-ripdoc-cli = { path = "crates/ripdoc-cli", version = "*"}
-ripdoc-core = { path = "crates/ripdoc-core", version = "*"}
-ripdoc-render = { path = "crates/ripdoc-render", version = "*"}
+[[bin]]
+name = "hotinterp"
+path = "src/bin/hotinterp/main.rs"
+required-features = ["hot-interpreter"]
+
+[features]
+hot-interpreter = [
+    "dep:anyhow",
+    "dep:libloading",
+    "dep:notify",
+    "dep:subsecond",
+]
+
+[dependencies]
+# CLI dependencies
+anyhow = { version = "1.0", optional = true }
+clap = { version = "4.5", features = ["derive"] }
+libloading = { version = "0.9", optional = true }
+notify = { version = "8.2", optional = true }
+owo-colors = "4.2"
+subsecond = { version = "0.7", optional = true }
+
+# cargo_utils module dependencies
+bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
+cargo_metadata = { version = "0.23", default-features = false }
+cargo_toml = { version = "0.22", default-features = false }
+dirs = { version = "6.0", default-features = false }
+rustdoc-json = { version = "0.9", default-features = false }
+semver = { version = "1.0", default-features = false }
+ureq = { version = "3.1" }
+
+# render module dependencies
+once_cell = { version = "1.21", default-features = false, features = ["std"] }
+regex = { version = "1.12", default-features = false }
 rust-format = { version = "0.3", default-features = false }
+
+# core module dependencies
+bitflags = { version = "2.10", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+
+# shared dependencies
 rustdoc-types = { version = "0.57", default-features = false }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+tempfile = { version = "3.23", default-features = false }
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[lints.rust]
+missing_docs = "warn"
 
 [patch.crates-io]
 rustdoc-json = { git = "https://github.com/Alb-O/cargo-public-api" }

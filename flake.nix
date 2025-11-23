@@ -46,7 +46,7 @@
           ];
           cargoBuildFlags = [
             "-p"
-            "ripdoc-cli"
+            "ripdoc"
           ];
           doCheck = false;
           meta = with pkgs.lib; {
