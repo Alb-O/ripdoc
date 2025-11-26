@@ -13,27 +13,10 @@ keywords = ["docs", "documentation", "outline", "cli"]
 name = "ripdoc"
 path = "src/main.rs"
 
-[[bin]]
-name = "hotinterp"
-path = "src/bin/hotinterp/main.rs"
-required-features = ["hot-interpreter"]
-
-[features]
-hot-interpreter = [
-    "dep:anyhow",
-    "dep:libloading",
-    "dep:notify",
-    "dep:subsecond",
-]
-
 [dependencies]
 # CLI dependencies
-anyhow = { version = "1.0", optional = true }
 clap = { version = "4.5", features = ["derive"] }
-libloading = { version = "0.9", optional = true }
-notify = { version = "8.2", optional = true }
 owo-colors = "4.2"
-subsecond = { version = "0.7", optional = true }
 
 # cargo_utils module dependencies
 bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
