@@ -1,6 +1,6 @@
 [package]
 name = "ripdoc"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 authors = ["Albert O'Shea <albertoshea2@gmail.com>"]
 description = "Query Rust docs and crate API from the command line"
@@ -14,32 +14,23 @@ name = "ripdoc"
 path = "src/main.rs"
 
 [dependencies]
-# CLI dependencies
-clap = { version = "4.5", features = ["derive"] }
-owo-colors = "4.2"
-
-# cargo_utils module dependencies
 bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
+bitflags = { version = "2.10", default-features = false }
 cargo_metadata = { version = "0.23", default-features = false }
 cargo_toml = { version = "0.22", default-features = false }
+clap = { version = "4.5", features = ["derive"] }
 dirs = { version = "6.0", default-features = false }
-rustdoc-json = { version = "0.9", default-features = false }
-semver = { version = "1.0", default-features = false }
-ureq = { version = "3.1" }
-
-# render module dependencies
 once_cell = { version = "1.21", default-features = false, features = ["std"] }
+owo-colors = "4.2"
 regex = { version = "1.12", default-features = false, features = ["std", "unicode-case"] }
 rust-format = { version = "0.3", default-features = false }
-
-# core module dependencies
-bitflags = { version = "2.10", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["derive"] }
-
-# shared dependencies
+rustdoc-json = { version = "0.9", default-features = false }
 rustdoc-types = { version = "0.56", default-features = false }
+semver = { version = "1.0", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 tempfile = { version = "3.23", default-features = false }
+ureq = { version = "3.1" }
 
 [dev-dependencies]
 pretty_assertions = "1.4"
