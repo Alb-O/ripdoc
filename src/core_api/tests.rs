@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use regex::Regex;
 use rustdoc_types::{
 	Abi, Crate, Function, FunctionHeader, FunctionSignature, Generics, Id, Impl, Item, ItemEnum,
 	Module, Path, Struct, StructKind, Target, Trait, Type, Visibility,
@@ -347,4 +348,149 @@ fn describe_domains_lists_selected_flags() {
 		super::describe_domains(SearchDomain::NAMES | SearchDomain::DOCS),
 		vec!["name", "doc"]
 	);
+}
+
+#[test]
+fn test_regex_pattern_directly() {
+	// Test that our regex pattern works as expected
+	let pattern = "Widget|helper";
+	let regex = Regex::new(&format!("(?i){}", pattern)).unwrap();
+
+	assert!(regex.is_match("Widget"), "Should match Widget");
+	assert!(regex.is_match("helper"), "Should match helper");
+	assert!(
+		regex.is_match("WIDGET"),
+		"Should match WIDGET (case insensitive)"
+	);
+	assert!(!regex.is_match("render"), "Should not match render");
+}
+
+#[test]
+fn or_search_matches_multiple_names() {
+	let index = build_index();
+	let mut options = SearchOptions::new("Widget|helper");
+	options.domains = SearchDomain::NAMES;
+	let results = index.search(&options);
+
+	// Should match both "Widget" and "helper"
+	assert!(
+		results.iter().any(|r| r.raw_name == "Widget"),
+		"Widget not found"
+	);
+	assert!(
+		results.iter().any(|r| r.raw_name == "helper"),
+		"helper not found"
+	);
+	assert_eq!(results.len(), 2);
+}
+
+#[test]
+fn or_search_matches_multiple_docs() {
+	let index = build_index();
+	let mut options = SearchOptions::new("highlight|colors");
+	options.domains = SearchDomain::DOCS;
+	let results = index.search(&options);
+
+	// "highlight" appears in Widget docs, "colors" appears in Paintable docs
+	assert!(results.iter().any(|r| r.raw_name == "Widget"));
+	assert!(results.iter().any(|r| r.raw_name == "Paintable"));
+}
+
+#[test]
+fn or_search_with_three_terms() {
+	let index = build_index();
+	let mut options = SearchOptions::new("render|paint|helper");
+	options.domains = SearchDomain::NAMES;
+	let results = index.search(&options);
+
+	// Should match all three
+	assert!(results.iter().any(|r| r.raw_name == "render"));
+	assert!(results.iter().any(|r| r.raw_name == "paint"));
+	assert!(results.iter().any(|r| r.raw_name == "helper"));
+}
+
+#[test]
+fn or_search_case_insensitive() {
+	let index = build_index();
+	let mut options = SearchOptions::new("widget|HELPER");
+	options.domains = SearchDomain::NAMES;
+	options.case_sensitive = false;
+	let results = index.search(&options);
+
+	// Should match both despite different casing
+	assert!(results.iter().any(|r| r.raw_name == "Widget"));
+	assert!(results.iter().any(|r| r.raw_name == "helper"));
+}
+
+#[test]
+fn or_search_case_sensitive() {
+	let index = build_index();
+	let mut options = SearchOptions::new("Widget|HELPER");
+	options.domains = SearchDomain::NAMES;
+	options.case_sensitive = true;
+	let results = index.search(&options);
+
+	// Should only match "Widget" (exact case), not "HELPER"
+	assert!(results.iter().any(|r| r.raw_name == "Widget"));
+	assert!(!results.iter().any(|r| r.raw_name == "helper"));
+	assert_eq!(results.len(), 1);
+}
+
+#[test]
+fn or_search_in_signatures() {
+	let index = build_index();
+	let mut options = SearchOptions::new("fn helper|fn render");
+	options.domains = SearchDomain::SIGNATURES;
+	let results = index.search(&options);
+
+	// Should match both functions
+	assert!(results.iter().any(|r| r.raw_name == "helper"));
+	assert!(results.iter().any(|r| r.raw_name == "render"));
+}
+
+#[test]
+fn or_search_no_matches() {
+	let index = build_index();
+	let mut options = SearchOptions::new("nonexistent|alsonothere");
+	options.domains = SearchDomain::NAMES;
+	let results = index.search(&options);
+
+	assert!(results.is_empty());
+}
+
+#[test]
+fn or_search_partial_match() {
+	let index = build_index();
+	let mut options = SearchOptions::new("Widget|nonexistent");
+	options.domains = SearchDomain::NAMES;
+	let results = index.search(&options);
+
+	// Should match "Widget" but not the nonexistent term
+	assert!(results.iter().any(|r| r.raw_name == "Widget"));
+	assert_eq!(results.len(), 1);
+}
+
+#[test]
+fn simple_search_still_works() {
+	let index = build_index();
+	let mut options = SearchOptions::new("Widget");
+	options.domains = SearchDomain::NAMES;
+	let results = index.search(&options);
+
+	// Regular search without pipe should still work
+	assert!(results.iter().any(|r| r.raw_name == "Widget"));
+}
+
+#[test]
+fn or_search_with_special_chars_escaped() {
+	let index = build_index();
+	// Test that regex special chars are escaped (except pipe)
+	let mut options = SearchOptions::new("Widget|helper.");
+	options.domains = SearchDomain::NAMES;
+	let results = index.search(&options);
+
+	// Should match "Widget" but not treat "." as regex wildcard
+	assert!(results.iter().any(|r| r.raw_name == "Widget"));
+	// "helper." should be treated literally, so won't match "helper"
+	assert!(!results.iter().any(|r| r.raw_name == "helper"));
 }

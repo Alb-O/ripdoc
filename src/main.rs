@@ -5,7 +5,9 @@ use std::process::{self, Command as ProcessCommand, Stdio};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use owo_colors::OwoColorize;
+use regex::Regex;
 use ripdoc::cargo_utils::{fetch_readme, find_latest_cached_version, resolve_target};
+use ripdoc::core_api::pattern::escape_regex_preserving_pipes;
 use ripdoc::{RenderFormat, Ripdoc, SearchDomain, SearchOptions, SourceLocation};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -488,12 +490,29 @@ fn run_readme(common: &CommonArgs, args: &ReadmeArgs) -> Result<(), Box<dyn Erro
 	}
 }
 
-/// Highlight all occurrences of the search query.
+/// Highlight all occurrences of the search query in the given text.
+///
+/// Queries containing pipe characters are treated as OR patterns and use regex highlighting.
+/// Single-term queries use substring-based highlighting for better performance.
+///
+/// Matches are highlighted in bright green and bold using ANSI escape codes.
 fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 	if query.is_empty() {
 		return text.to_string();
 	}
 
+	if query.contains('|') {
+		highlight_matches_regex(text, query, case_sensitive)
+	} else {
+		highlight_matches_simple(text, query, case_sensitive)
+	}
+}
+
+/// Highlight matches using substring search for single-term queries.
+///
+/// This performs simple string containment matching and highlights all occurrences.
+/// More efficient than regex for single-term searches.
+fn highlight_matches_simple(text: &str, query: &str, case_sensitive: bool) -> String {
 	let mut result = String::with_capacity(text.len() * 2);
 	let search_text = if case_sensitive {
 		text.to_string()
@@ -511,9 +530,7 @@ fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 
 	while let Some(pos) = search_text[search_start..].find(&search_query) {
 		let absolute_pos = search_start + pos;
-		// Add text before the match
 		result.push_str(&text[last_end..absolute_pos]);
-		// Add the highlighted match
 		let match_end = absolute_pos + query.len();
 		let matched_text = &text[absolute_pos..match_end];
 		result.push_str(&matched_text.to_string().bright_green().bold().to_string());
@@ -521,7 +538,39 @@ fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 		search_start = match_end;
 	}
 
-	// Add remaining text
+	result.push_str(&text[last_end..]);
+	result
+}
+
+/// Highlight matches using regex for OR queries containing pipe characters.
+///
+/// The pipe character is treated as a regex OR operator while other regex
+/// metacharacters are escaped. Falls back to substring highlighting if regex
+/// compilation fails.
+fn highlight_matches_regex(text: &str, pattern: &str, case_sensitive: bool) -> String {
+	let escaped_pattern = escape_regex_preserving_pipes(pattern);
+
+	let regex = match if case_sensitive {
+		Regex::new(&escaped_pattern)
+	} else {
+		Regex::new(&format!("(?i){}", escaped_pattern))
+	} {
+		Ok(re) => re,
+		Err(_) => {
+			return highlight_matches_simple(text, pattern, case_sensitive);
+		}
+	};
+
+	let mut result = String::with_capacity(text.len() * 2);
+	let mut last_end = 0;
+
+	for mat in regex.find_iter(text) {
+		result.push_str(&text[last_end..mat.start()]);
+		let matched_text = &text[mat.start()..mat.end()];
+		result.push_str(&matched_text.to_string().bright_green().bold().to_string());
+		last_end = mat.end();
+	}
+
 	result.push_str(&text[last_end..]);
 	result
 }

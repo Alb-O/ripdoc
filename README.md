@@ -15,6 +15,20 @@ ripdoc print reqwest --search status --search-spec name,signature
 
 By default the query matches the name, doc, and signature domains, case-insensitively.
 
+### OR Searches
+
+Use the pipe character `|` to search for multiple terms with OR logic:
+
+```sh
+# Find items matching "init" OR "clone" OR "fetch" OR "remote" OR "config"
+ripdoc print gix --search "init|clone|fetch|remote|config"
+
+# Search for multiple method names
+ripdoc list tokio --search "spawn|block_on|sleep"
+```
+
+The OR pattern works across all search domains (names, docs, paths, signatures).
+
 Add `--direct-match-only`|`-d` when you want container matches (modules, structs, traits) to stay collapsed and show only the exact hits.
 
 ## Listing Mode

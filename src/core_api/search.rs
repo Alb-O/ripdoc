@@ -5,8 +5,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use bitflags::bitflags;
+use regex::Regex;
 use rustdoc_types::{Crate, Id, Item, ItemEnum, Module, Struct, StructKind, Visibility};
 
+use super::pattern::{escape_regex_preserving_pipes, strip_symbols_preserving_pipes};
 use crate::render::{
 	RenderSelection, render_name, render_path, render_type, signatures as signature,
 };
@@ -269,6 +271,16 @@ impl SearchIndex {
 	}
 
 	/// Execute a query against the index and return matching results.
+	///
+	/// Queries containing the pipe character (`|`) are treated as OR patterns using regex matching.
+	/// For example, `"init|clone|fetch"` matches items containing any of those terms.
+	/// Single-term queries use simple substring matching for better performance.
+	///
+	/// # Arguments
+	/// * `options` - Search configuration including query string, domains, and matching behavior
+	///
+	/// # Returns
+	/// A vector of search results with match metadata populated in the `matched` field.
 	pub fn search(&self, options: &SearchOptions) -> Vec<SearchResult> {
 		let mut opts = options.clone();
 		opts.ensure_domains();
@@ -277,14 +289,28 @@ impl SearchIndex {
 			return Vec::new();
 		}
 
-		let normalized_query = if opts.case_sensitive {
-			trimmed.to_string()
+		let has_or_pattern = trimmed.contains('|');
+
+		if has_or_pattern {
+			self.search_with_pattern(trimmed, &opts)
 		} else {
-			trimmed.to_lowercase()
+			self.search_simple(trimmed, &opts)
+		}
+	}
+
+	/// Perform substring-based search for single-term queries.
+	///
+	/// This method uses simple string containment checks, which provide better performance
+	/// than regex for single-term searches. For documentation and signature searches,
+	/// special characters are stripped to avoid false negatives from syntax noise.
+	fn search_simple(&self, query: &str, opts: &SearchOptions) -> Vec<SearchResult> {
+		let normalized_query = if opts.case_sensitive {
+			query.to_string()
+		} else {
+			query.to_lowercase()
 		};
 
-		// For signature and doc searches, also create a symbol-stripped version of the query
-		let stripped_query = strip_symbols(&normalized_query);
+		let stripped_query = strip_symbols_preserving_pipes(&normalized_query);
 
 		let mut results = Vec::new();
 		for entry in &self.entries {
@@ -296,7 +322,7 @@ impl SearchIndex {
 			}
 			if opts.domains.contains(SearchDomain::DOCS)
 				&& entry.docs.as_ref().is_some_and(|docs| {
-					let stripped_docs = strip_symbols(docs);
+					let stripped_docs = strip_symbols_preserving_pipes(docs);
 					contains(&stripped_docs, &stripped_query, opts.case_sensitive)
 				}) {
 				matched |= SearchDomain::DOCS;
@@ -308,10 +334,99 @@ impl SearchIndex {
 			}
 			if opts.domains.contains(SearchDomain::SIGNATURES)
 				&& entry.signature.as_ref().is_some_and(|sig| {
-					let stripped_sig = strip_symbols(sig);
+					let stripped_sig = strip_symbols_preserving_pipes(sig);
 					contains(&stripped_sig, &stripped_query, opts.case_sensitive)
 				}) {
 				matched |= SearchDomain::SIGNATURES;
+			}
+
+			if !matched.is_empty() {
+				let mut clone = entry.clone();
+				clone.matched = matched;
+				results.push(clone);
+			}
+		}
+
+		results
+	}
+
+	/// Perform regex-based search for OR queries containing pipe characters.
+	///
+	/// This method treats the pipe character (`|`) as a regex OR operator while escaping
+	/// all other regex metacharacters. For example, `"init|clone"` matches items containing
+	/// either "init" or "clone". The pattern `"foo.bar|baz*"` treats `.` and `*` as literal
+	/// characters while `|` remains an OR operator.
+	///
+	/// For documentation and signature searches, a symbol-stripped version of the pattern
+	/// is created to match against stripped content, avoiding false negatives from syntax.
+	///
+	/// Falls back to substring search if regex compilation fails.
+	fn search_with_pattern(&self, pattern: &str, opts: &SearchOptions) -> Vec<SearchResult> {
+		let escaped_pattern = escape_regex_preserving_pipes(pattern);
+
+		let regex = match if opts.case_sensitive {
+			Regex::new(&escaped_pattern)
+		} else {
+			Regex::new(&format!("(?i){}", escaped_pattern))
+		} {
+			Ok(re) => re,
+			Err(_) => {
+				return self.search_simple(pattern, opts);
+			}
+		};
+
+		let stripped_pattern = strip_symbols_preserving_pipes(pattern);
+		let stripped_regex = if opts.domains.contains(SearchDomain::DOCS)
+			|| opts.domains.contains(SearchDomain::SIGNATURES)
+		{
+			let escaped_stripped = escape_regex_preserving_pipes(&stripped_pattern);
+			if opts.case_sensitive {
+				Regex::new(&escaped_stripped).ok()
+			} else {
+				Regex::new(&format!("(?i){}", escaped_stripped)).ok()
+			}
+		} else {
+			None
+		};
+
+		let mut results = Vec::new();
+		for entry in &self.entries {
+			let mut matched = SearchDomain::empty();
+
+			if opts.domains.contains(SearchDomain::NAMES) {
+				// Regex with (?i) flag handles case-insensitivity itself
+				if regex.is_match(&entry.raw_name) {
+					matched |= SearchDomain::NAMES;
+				}
+			}
+
+			if opts.domains.contains(SearchDomain::DOCS) {
+				if let Some(docs) = &entry.docs {
+					let stripped_docs = strip_symbols_preserving_pipes(docs);
+					if let Some(ref stripped_re) = stripped_regex {
+						if stripped_re.is_match(&stripped_docs) {
+							matched |= SearchDomain::DOCS;
+						}
+					}
+				}
+			}
+
+			if opts.domains.contains(SearchDomain::PATHS) {
+				// Regex with (?i) flag handles case-insensitivity itself
+				if regex.is_match(&entry.path_string) {
+					matched |= SearchDomain::PATHS;
+				}
+			}
+
+			if opts.domains.contains(SearchDomain::SIGNATURES) {
+				if let Some(sig) = &entry.signature {
+					let stripped_sig = strip_symbols_preserving_pipes(sig);
+					if let Some(ref stripped_re) = stripped_regex {
+						if stripped_re.is_match(&stripped_sig) {
+							matched |= SearchDomain::SIGNATURES;
+						}
+					}
+				}
 			}
 
 			if !matched.is_empty() {
@@ -984,14 +1099,6 @@ fn contains(haystack: &str, needle: &str, case_sensitive: bool) -> bool {
 	} else {
 		haystack.to_lowercase().contains(needle)
 	}
-}
-
-/// Strip Rust syntax symbols from text, keeping only alphanumeric characters, underscores, and whitespace.
-/// This is used when searching signatures to avoid matching against irrelevant syntax characters.
-fn strip_symbols(text: &str) -> String {
-	text.chars()
-		.filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '_')
-		.collect()
 }
 
 /// Build a renderer selection set covering matches, their ancestors, and optionally their children.

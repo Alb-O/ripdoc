@@ -8,6 +8,8 @@
 pub mod error;
 /// Hierarchical tree structure for organizing list output.
 pub mod list_tree;
+/// Pattern utilities for search query handling.
+pub mod pattern;
 /// Search and indexing utilities.
 pub mod search;
 use rustdoc_types::Crate;

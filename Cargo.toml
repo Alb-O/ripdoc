@@ -46,7 +46,7 @@ ureq = { version = "3.1" }
 
 # render module dependencies
 once_cell = { version = "1.21", default-features = false, features = ["std"] }
-regex = { version = "1.12", default-features = false }
+regex = { version = "1.12", default-features = false, features = ["std", "unicode-case"] }
 rust-format = { version = "0.3", default-features = false }
 
 # core module dependencies
