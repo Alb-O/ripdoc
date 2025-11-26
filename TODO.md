@@ -13,3 +13,4 @@ Feel free to add more intermediate sub-tasks as needed.
   - [ ] ability to dump source code files easily (without having to know path of cache registry)
     - [ ] possibly filter out/exclude comments/docstrings on source code dump as the docs would likely already be in context
 - [x] Allow 'or' searches, e.g. `ripdoc print gix --search "init|clone|fetch|remote|config"`
+- [ ] Allow searching version numbers without specifying last digit e.g. `ripdoc print bat@0.24`
