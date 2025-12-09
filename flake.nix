@@ -9,7 +9,6 @@
 
   outputs =
     {
-      self,
       nixpkgs,
       rust-overlay,
       flake-utils,
@@ -39,16 +38,33 @@
           nativeBuildInputs = with pkgs; [
             pkg-config
             rust-bin.nightly.latest.default
+            makeWrapper
+            clang
+            llvmPackages_latest.bintools
           ];
 
           buildInputs = with pkgs; [
             openssl
+            clang
+            llvmPackages_latest.bintools
           ];
           cargoBuildFlags = [
             "-p"
             "ripdoc"
           ];
           doCheck = false;
+          postInstall = ''
+            wrapProgram $out/bin/ripdoc \
+              --set OPENSSL_DIR ${pkgs.openssl.dev} \
+              --set OPENSSL_LIB_DIR ${pkgs.openssl.out}/lib \
+              --set OPENSSL_INCLUDE_DIR ${pkgs.openssl.dev}/include \
+              --prefix PKG_CONFIG_PATH : ${pkgs.openssl.dev}/lib/pkgconfig \
+              --set CC ${pkgs.clang}/bin/clang \
+              --set CXX ${pkgs.clang}/bin/clang++ \
+              --set AR ${pkgs.llvmPackages_latest.bintools}/bin/llvm-ar \
+              --set RANLIB ${pkgs.llvmPackages_latest.bintools}/bin/llvm-ranlib \
+              --set LD ${pkgs.llvmPackages_latest.bintools}/bin/ld.lld
+          '';
           meta = with pkgs.lib; {
             description = "Query and outline Rust documentation from the command line";
             homepage = "https://github.com/Alb-O/ripdoc";
@@ -65,10 +81,22 @@
               openssl
               pkg-config
               cargo-sort
+              clang
+              llvmPackages_latest.bintools
               (rust-bin.nightly.latest.default.override { extensions = [ "rust-src" ]; })
             ];
 
-            shellHook = '''';
+            shellHook = ''
+              export OPENSSL_DIR=${openssl.dev}
+              export OPENSSL_LIB_DIR=${openssl.out}/lib
+              export OPENSSL_INCLUDE_DIR=${openssl.dev}/include
+              export PKG_CONFIG_PATH=${openssl.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:}$PKG_CONFIG_PATH
+              export CC=${clang}/bin/clang
+              export CXX=${clang}/bin/clang++
+              export AR=${llvmPackages_latest.bintools}/bin/llvm-ar
+              export RANLIB=${llvmPackages_latest.bintools}/bin/llvm-ranlib
+              export LD=${llvmPackages_latest.bintools}/bin/ld.lld
+            '';
           };
       }
     );
