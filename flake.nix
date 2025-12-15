@@ -21,9 +21,7 @@
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-      in
-      {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
+        ripdocPkg = pkgs.rustPlatform.buildRustPackage {
           pname = "ripdoc";
           version = "0.2.2";
           src = pkgs.lib.cleanSource ./.;
@@ -39,19 +37,24 @@
             pkg-config
             rust-bin.nightly.latest.default
             makeWrapper
-            clang
-            llvmPackages_latest.bintools
+            gcc
+            binutils
           ];
 
           buildInputs = with pkgs; [
             openssl
-            clang
-            llvmPackages_latest.bintools
+            gcc
+            binutils
           ];
           cargoBuildFlags = [
             "-p"
             "ripdoc"
           ];
+          AR = "${pkgs.binutils}/bin/ar";
+          RANLIB = "${pkgs.binutils}/bin/ranlib";
+          LD = "${pkgs.binutils}/bin/ld";
+          CC = "${pkgs.gcc}/bin/gcc";
+          CXX = "${pkgs.gcc}/bin/g++";
           doCheck = false;
           postInstall = ''
             wrapProgram $out/bin/ripdoc \
@@ -59,11 +62,11 @@
               --set OPENSSL_LIB_DIR ${pkgs.openssl.out}/lib \
               --set OPENSSL_INCLUDE_DIR ${pkgs.openssl.dev}/include \
               --prefix PKG_CONFIG_PATH : ${pkgs.openssl.dev}/lib/pkgconfig \
-              --set CC ${pkgs.clang}/bin/clang \
-              --set CXX ${pkgs.clang}/bin/clang++ \
-              --set AR ${pkgs.llvmPackages_latest.bintools}/bin/llvm-ar \
-              --set RANLIB ${pkgs.llvmPackages_latest.bintools}/bin/llvm-ranlib \
-              --set LD ${pkgs.llvmPackages_latest.bintools}/bin/ld.lld
+              --set CC ${pkgs.gcc}/bin/gcc \
+              --set CXX ${pkgs.gcc}/bin/g++ \
+              --set AR ${pkgs.binutils}/bin/ar \
+              --set RANLIB ${pkgs.binutils}/bin/ranlib \
+              --set LD ${pkgs.binutils}/bin/ld
           '';
           meta = with pkgs.lib; {
             description = "Query and outline Rust documentation from the command line";
@@ -73,29 +76,38 @@
             mainProgram = "ripdoc";
           };
         };
+      in
+      {
+        packages.default = ripdocPkg;
 
         devShells.default =
           with pkgs;
           mkShell {
+            packages = [ ripdocPkg ];
             buildInputs = [
               openssl
               pkg-config
               cargo-sort
-              clang
-              llvmPackages_latest.bintools
+              gcc
+              binutils
               (rust-bin.nightly.latest.default.override { extensions = [ "rust-src" ]; })
             ];
 
+            OPENSSL_DIR = openssl.dev;
+            OPENSSL_LIB_DIR = "${openssl.out}/lib";
+            OPENSSL_INCLUDE_DIR = "${openssl.dev}/include";
+            PKG_CONFIG_PATH = "${openssl.dev}/lib/pkgconfig";
+            CC = "${gcc}/bin/gcc";
+            CXX = "${gcc}/bin/g++";
+            AR = "${binutils}/bin/ar";
+            RANLIB = "${binutils}/bin/ranlib";
+            LD = "${binutils}/bin/ld";
+
             shellHook = ''
-              export OPENSSL_DIR=${openssl.dev}
-              export OPENSSL_LIB_DIR=${openssl.out}/lib
-              export OPENSSL_INCLUDE_DIR=${openssl.dev}/include
               export PKG_CONFIG_PATH=${openssl.dev}/lib/pkgconfig''${PKG_CONFIG_PATH:+:}$PKG_CONFIG_PATH
-              export CC=${clang}/bin/clang
-              export CXX=${clang}/bin/clang++
-              export AR=${llvmPackages_latest.bintools}/bin/llvm-ar
-              export RANLIB=${llvmPackages_latest.bintools}/bin/llvm-ranlib
-              export LD=${llvmPackages_latest.bintools}/bin/ld.lld
+              export AR=${binutils}/bin/ar
+              export RANLIB=${binutils}/bin/ranlib
+              export LD=${binutils}/bin/ld
             '';
           };
       }
