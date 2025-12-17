@@ -8,6 +8,7 @@ pub fn render_markdown(source: &str) -> String {
 }
 
 fn rust_to_markdown(source: &str) -> String {
+	let base_indent = min_leading_indent(source);
 	let mut markdown = String::new();
 	let mut in_code_block = false;
 	let mut need_gap_before_code = false;
@@ -19,16 +20,19 @@ fn rust_to_markdown(source: &str) -> String {
 
 		if is_doc_comment(trimmed) {
 			let doc_block = collect_doc_block(line, &mut lines);
-			let is_inner_doc = trimmed.starts_with("///");
-			let inline_doc = in_code_block
-				&& is_inner_doc
-				&& doc_block.len() == 1
-				&& !doc_block[0].1.trim().is_empty();
+			let is_outer_doc = trimmed.starts_with("///");
+			let next_line = lines.peek().copied();
+			let inline_doc = is_outer_doc && should_inline_doc_block(base_indent, next_line, &doc_block);
 
 			if inline_doc {
-				let indent = &doc_block[0].0;
-				let text = doc_block[0].1.trim();
-				code_buffer.push(format!("{indent}// {text}"));
+				in_code_block = true;
+				for (indent, text) in doc_block {
+					let text = text.trim();
+					if text.is_empty() {
+						continue;
+					}
+					code_buffer.push(format!("{indent}// {text}"));
+				}
 			} else {
 				flush_code_block(&mut markdown, &mut code_buffer, &mut need_gap_before_code);
 				in_code_block = false;
@@ -127,6 +131,75 @@ fn strip_doc_comment(line: &str) -> &str {
 	} else {
 		line
 	}
+}
+
+fn min_leading_indent(source: &str) -> usize {
+	source
+		.lines()
+		.filter(|line| !line.trim().is_empty())
+		.map(|line| {
+			line.as_bytes()
+				.iter()
+				.take_while(|&&b| matches!(b, b' ' | b'\t'))
+				.count()
+		})
+		.min()
+		.unwrap_or(0)
+}
+
+fn looks_like_fn_signature(line: Option<&str>) -> bool {
+	let Some(line) = line else {
+		return false;
+	};
+	let trimmed = line.trim_start();
+	if trimmed.is_empty() {
+		return false;
+	}
+
+	let mut tokens = trimmed.split_whitespace();
+	for token in &mut tokens {
+		if token == "fn" {
+			return true;
+		}
+		match token {
+			"pub" | "const" | "async" | "unsafe" => {}
+			_ => return false,
+		}
+	}
+
+	false
+}
+
+fn should_inline_doc_block(
+	base_indent: usize,
+	next_line: Option<&str>,
+	doc_block: &[(String, String)],
+) -> bool {
+	let Some((indent, _)) = doc_block.first() else {
+		return false;
+	};
+
+	for (_, text) in doc_block {
+		let trimmed = text.trim();
+		if trimmed.is_empty() {
+			return false;
+		}
+		if trimmed.starts_with("```") {
+			return false;
+		}
+	}
+
+	let indent_len = indent
+		.as_bytes()
+		.iter()
+		.take_while(|&&b| matches!(b, b' ' | b'\t'))
+		.count();
+
+	if indent_len > base_indent {
+		return true;
+	}
+
+	looks_like_fn_signature(next_line)
 }
 
 fn is_list_item(line: &str) -> bool {
@@ -450,6 +523,52 @@ pub fn set_input(&mut self) {}
 		let expected = r#"```rust
 pub fn alpha() {}
 pub fn beta() {}
+```"#;
+
+		assert_eq!(rust_to_markdown(source), expected);
+	}
+
+	#[test]
+	fn inlines_wrapped_doc_comments_inside_blocks() {
+		let source = "\
+pub trait T {
+    /// This is a long doc comment that rustfmt might wrap
+    /// across multiple lines.
+    fn f(&self);
+}
+";
+
+		let expected = r#"```rust
+pub trait T {
+    // This is a long doc comment that rustfmt might wrap
+    // across multiple lines.
+    fn f(&self);
+}
+```"#;
+
+		assert_eq!(rust_to_markdown(source), expected);
+	}
+
+	#[test]
+	fn inlines_wrapped_function_docs_at_top_level() {
+		let source = "\
+/// Returns whether newly drawn text should be rendered with the bold text
+/// attribute.
+pub fn bold(&self) -> bool {}
+
+/// Returns whether newly drawn text should be rendered with the dim text
+/// attribute.
+pub fn dim(&self) -> bool {}
+";
+
+		let expected = r#"```rust
+// Returns whether newly drawn text should be rendered with the bold text
+// attribute.
+pub fn bold(&self) -> bool {}
+
+// Returns whether newly drawn text should be rendered with the dim text
+// attribute.
+pub fn dim(&self) -> bool {}
 ```"#;
 
 		assert_eq!(rust_to_markdown(source), expected);
