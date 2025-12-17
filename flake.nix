@@ -66,7 +66,8 @@
               --set CXX ${pkgs.gcc}/bin/g++ \
               --set AR ${pkgs.binutils}/bin/ar \
               --set RANLIB ${pkgs.binutils}/bin/ranlib \
-              --set LD ${pkgs.binutils}/bin/ld
+              --set LD ${pkgs.binutils}/bin/ld \
+              --prefix PATH : ${pkgs.rust-bin.nightly.latest.default}/bin:${pkgs.gcc}/bin:${pkgs.binutils}/bin:${pkgs.pkg-config}/bin
           '';
           meta = with pkgs.lib; {
             description = "Query and outline Rust documentation from the command line";
