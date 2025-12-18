@@ -101,6 +101,7 @@ pub fn inspect_crate(source: &str, private_items: bool, is_proc_macro: bool) -> 
 	ripdoc
 		.inspect(&target, false, false, Vec::new(), private_items)
 		.unwrap()
+		.remove(0)
 }
 
 /// Render a crate and compare the formatted output against `expected_output`.

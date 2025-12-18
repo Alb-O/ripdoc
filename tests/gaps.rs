@@ -26,9 +26,10 @@ fn use_glob_emits_single_gap_marker() {
 
 	let (_temp_dir, target) = create_test_crate(source, false);
 	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
-	let crate_data = ripdoc
+	let crate_data_list = ripdoc
 		.inspect(&target, false, false, Vec::new(), true)
 		.unwrap();
+	let crate_data = &crate_data_list[0];
 
 	let mut target_id = None;
 	let mut use_id = None;

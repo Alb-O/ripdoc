@@ -160,16 +160,20 @@ impl Ripdoc {
 		all_features: bool,
 		features: Vec<String>,
 		private_items: bool,
-	) -> Result<Crate> {
-		let rt = resolve_target(target, self.offline)?;
-		Ok(rt.read_crate(
-			no_default_features,
-			all_features,
-			features,
-			private_items,
-			self.silent,
-			&self.cache_config,
-		)?)
+	) -> Result<Vec<Crate>> {
+		let resolved_targets = resolve_target(target, self.offline)?;
+		let mut crates = Vec::with_capacity(resolved_targets.len());
+		for rt in resolved_targets {
+			crates.push(rt.read_crate(
+				no_default_features,
+				all_features,
+				features.clone(),
+				private_items,
+				self.silent,
+				&self.cache_config,
+			)?);
+		}
+		Ok(crates)
 	}
 
 	/// Execute a search against the crate and return the matched items along with a rendered skeleton.
@@ -184,40 +188,48 @@ impl Ripdoc {
 		features: Vec<String>,
 		options: &SearchOptions,
 	) -> Result<SearchResponse> {
-		let rt = resolve_target(target, self.offline)?;
-		let crate_data = rt.read_crate(
-			no_default_features,
-			all_features,
-			features,
-			options.include_private,
-			self.silent,
-			&self.cache_config,
-		)?;
+		let resolved_targets = resolve_target(target, self.offline)?;
+		let mut all_results = Vec::new();
+		let mut all_rendered = Vec::new();
 
-		let index = SearchIndex::build(
-			&crate_data,
-			options.include_private,
-			Some(rt.package_root()),
-		);
-		let results = index.search(options);
+		for rt in resolved_targets {
+			let crate_data = rt.read_crate(
+				no_default_features,
+				all_features,
+				features.clone(),
+				options.include_private,
+				self.silent,
+				&self.cache_config,
+			)?;
 
-		if results.is_empty() {
-			return Ok(SearchResponse {
-				results,
-				rendered: String::new(),
-			});
+			let index = SearchIndex::build(
+				&crate_data,
+				options.include_private,
+				Some(rt.package_root()),
+			);
+			let results = index.search(options);
+
+			if results.is_empty() {
+				continue;
+			}
+
+			let selection = build_render_selection(&index, &results, options.expand_containers);
+			let renderer = Renderer::default()
+				.with_filter(&rt.filter)
+				.with_auto_impls(self.auto_impls)
+				.with_private_items(options.include_private)
+				.with_format(self.render_format)
+				.with_selection(selection);
+			let rendered = renderer.render(&crate_data)?;
+
+			all_results.extend(results);
+			all_rendered.push(rendered);
 		}
 
-		let selection = build_render_selection(&index, &results, options.expand_containers);
-		let renderer = Renderer::default()
-			.with_filter(&rt.filter)
-			.with_auto_impls(self.auto_impls)
-			.with_private_items(options.include_private)
-			.with_format(self.render_format)
-			.with_selection(selection);
-		let rendered = renderer.render(&crate_data)?;
-
-		Ok(SearchResponse { results, rendered })
+		Ok(SearchResponse {
+			results: all_results,
+			rendered: all_rendered.join("\n"),
+		})
 	}
 
 	/// Produce a lightweight listing of crate items, optionally filtered by a search query.
@@ -235,44 +247,49 @@ impl Ripdoc {
 				.map(|options| options.include_private)
 				.unwrap_or(false);
 
-		let rt = resolve_target(target, self.offline)?;
-		let crate_data = rt.read_crate(
-			no_default_features,
-			all_features,
-			features,
-			include_private,
-			self.silent,
-			&self.cache_config,
-		)?;
+		let resolved_targets = resolve_target(target, self.offline)?;
+		let mut all_results = Vec::new();
 
-		let index = SearchIndex::build(&crate_data, include_private, Some(rt.package_root()));
+		for rt in resolved_targets {
+			let crate_data = rt.read_crate(
+				no_default_features,
+				all_features,
+				features.clone(),
+				include_private,
+				self.silent,
+				&self.cache_config,
+			)?;
 
-		let mut results: Vec<ListItem> = if let Some(options) = search {
-			index
-				.search(options)
-				.into_iter()
-				.map(|result| ListItem {
-					kind: result.kind,
-					path: result.path_string,
-					source: result.source,
-				})
-				.collect()
-		} else {
-			index
-				.entries()
-				.iter()
-				.cloned()
-				.map(|entry| ListItem {
-					kind: entry.kind,
-					path: entry.path_string,
-					source: entry.source,
-				})
-				.collect()
-		};
+			let index = SearchIndex::build(&crate_data, include_private, Some(rt.package_root()));
 
-		results.retain(|item| item.kind != SearchItemKind::Use);
+			let results: Vec<ListItem> = if let Some(options) = search {
+				index
+					.search(options)
+					.into_iter()
+					.map(|result| ListItem {
+						kind: result.kind,
+						path: result.path_string,
+						source: result.source,
+					})
+					.collect()
+			} else {
+				index
+					.entries()
+					.iter()
+					.cloned()
+					.map(|entry| ListItem {
+						kind: entry.kind,
+						path: entry.path_string,
+						source: entry.source,
+					})
+					.collect()
+			};
+			all_results.extend(results);
+		}
 
-		Ok(results)
+		all_results.retain(|item| item.kind != SearchItemKind::Use);
+
+		Ok(all_results)
 	}
 
 	/// Render the crate target into a Rust skeleton without filtering.
@@ -284,46 +301,67 @@ impl Ripdoc {
 		features: Vec<String>,
 		private_items: bool,
 	) -> Result<String> {
-		let rt = resolve_target(target, self.offline)?;
-		let crate_data = rt.read_crate(
-			no_default_features,
-			all_features,
-			features.clone(),
-			private_items,
-			self.silent,
-			&self.cache_config,
-		)?;
+		let resolved_targets = resolve_target(target, self.offline)?;
+		let mut rendered_outputs = Vec::new();
 
-		let renderer = Renderer::default()
-			.with_filter(&rt.filter)
-			.with_auto_impls(self.auto_impls)
-			.with_private_items(private_items)
-			.with_format(self.render_format);
-
-		let rendered = renderer.render(&crate_data)?;
-
-		// If the public API is essentially empty and we weren't already including private items,
-		// automatically retry with private items enabled (useful for binary-only crates)
-		if !private_items && is_empty_output(&rendered) {
-			let crate_data_private = rt.read_crate(
+		for rt in resolved_targets {
+			let crate_data = rt.read_crate(
 				no_default_features,
 				all_features,
-				features,
-				true,
+				features.clone(),
+				private_items,
 				self.silent,
 				&self.cache_config,
 			)?;
 
-			let renderer_private = Renderer::default()
+			let renderer = Renderer::default()
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)
-				.with_private_items(true)
-				.with_format(RenderFormat::Rust);
+				.with_private_items(private_items)
+				.with_format(self.render_format);
 
-			return Ok(renderer_private.render(&crate_data_private)?);
+			let mut rendered = renderer.render(&crate_data)?;
+
+			// If the public API is essentially empty and we weren't already including private items,
+			// automatically retry with private items enabled (useful for binary-only crates)
+			if !private_items && is_empty_output(&rendered) {
+				let crate_data_private = rt.read_crate(
+					no_default_features,
+					all_features,
+					features.clone(),
+					true,
+					self.silent,
+					&self.cache_config,
+				)?;
+
+				let renderer_private = Renderer::default()
+					.with_filter(&rt.filter)
+					.with_auto_impls(self.auto_impls)
+					.with_private_items(true)
+					.with_format(RenderFormat::Rust);
+
+				rendered = renderer_private.render(&crate_data_private)?;
+			}
+
+			if let Some(ref name) = rt.package_name {
+				let header = match self.render_format {
+					RenderFormat::Markdown => format!("# Package: {name}\n\n"),
+					RenderFormat::Rust => format!("// Package: {name}\n\n"),
+				};
+				rendered = format!("{header}{rendered}");
+			}
+
+			rendered_outputs.push(rendered);
 		}
 
-		Ok(rendered)
+		let separator = match self.render_format {
+			RenderFormat::Markdown => "\n\n---\n\n",
+			RenderFormat::Rust => {
+				"\n\n// ----------------------------------------------------------------------------\n\n"
+			}
+		};
+
+		Ok(rendered_outputs.join(separator))
 	}
 
 	/// Returns a pretty-printed version of the crate's JSON representation.
@@ -342,12 +380,18 @@ impl Ripdoc {
 		features: Vec<String>,
 		private_items: bool,
 	) -> Result<String> {
-		Ok(serde_json::to_string_pretty(&self.inspect(
+		let crates = self.inspect(
 			target,
 			no_default_features,
 			all_features,
 			features,
 			private_items,
-		)?)?)
+		)?;
+
+		if crates.len() == 1 {
+			Ok(serde_json::to_string_pretty(&crates[0])?)
+		} else {
+			Ok(serde_json::to_string_pretty(&crates)?)
+		}
 	}
 }

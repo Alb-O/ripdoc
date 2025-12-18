@@ -48,7 +48,14 @@ impl CargoPath {
 
 		// Build package info for cache key
 		let package_info = if let Some(ref package) = manifest.package {
-			format!("{}-{}", package.name, package.version())
+			let name = &package.name;
+			let version = package
+				.version
+				.get()
+				.ok()
+				.map(|v| v.as_str())
+				.unwrap_or("workspace");
+			format!("{}-{}", name, version)
 		} else {
 			// For virtual manifests or when package info is missing, use a default
 			"unknown-package".to_string()
@@ -260,14 +267,15 @@ impl CargoPath {
 				return Ok(Some(super::resolved_target::ResolvedTarget::new(
 					Self::Path(package_path),
 					&[],
+					Some(package.name.to_string()),
 				)));
 			}
 		}
 		Ok(None)
 	}
 
-	/// List all packages in the current workspace.
-	pub(super) fn list_workspace_packages(&self) -> Result<Vec<String>> {
+	/// List all packages in the current workspace, returning their names and manifest directory paths.
+	pub(super) fn list_workspace_packages(&self) -> Result<Vec<(String, PathBuf)>> {
 		let workspace_manifest_path = self.manifest_path()?;
 
 		let metadata = cargo_metadata::MetadataCommand::new()
@@ -275,13 +283,18 @@ impl CargoPath {
 			.exec()
 			.map_err(|err| RipdocError::Generate(format!("Failed to get cargo metadata: {err}")))?;
 
-		let mut packages: Vec<String> = metadata
+		let mut packages: Vec<(String, PathBuf)> = metadata
 			.workspace_packages()
 			.iter()
-			.map(|p| p.name.to_string())
+			.map(|p| {
+				(
+					p.name.to_string(),
+					p.manifest_path.parent().unwrap().to_path_buf().into(),
+				)
+			})
 			.collect();
 
-		packages.sort();
+		packages.sort_by(|a, b| a.0.cmp(&b.0));
 		Ok(packages)
 	}
 

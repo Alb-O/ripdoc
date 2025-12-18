@@ -424,7 +424,11 @@ fn run_readme(common: &CommonArgs, args: &ReadmeArgs) -> Result<(), Box<dyn Erro
 			// Try to resolve target to see if it's a local workspace member or dependency
 			resolve_target(&args.target, common.offline)
 				.ok()
-				.map(|resolved| resolved.package_root().to_path_buf())
+				.and_then(|resolved_list| {
+					resolved_list
+						.first()
+						.map(|resolved| resolved.package_root().to_path_buf())
+				})
 		}
 	};
 
