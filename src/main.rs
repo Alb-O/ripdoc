@@ -144,6 +144,25 @@ struct ReadmeArgs {
 	common: CommonArgs,
 }
 
+#[derive(Args, Clone)]
+/// Arguments for the `skelebuild` subcommand.
+struct SkelebuildArgs {
+	/// Target to add to the skeleton.
+	target: Option<String>,
+
+	/// Output file for the skeleton.
+	#[arg(short = 'O', long)]
+	output: Option<std::path::PathBuf>,
+
+	/// Reset the current skelebuild state.
+	#[arg(long)]
+	reset: bool,
+
+	#[command(flatten)]
+	/// Common arguments for configuring Ripdoc.
+	common: CommonArgs,
+}
+
 #[derive(Subcommand, Clone)]
 enum Command {
 	/// Print a crate skeleton (default).
@@ -154,6 +173,8 @@ enum Command {
 	Raw(PrintArgs),
 	/// Fetch and print the README of the target crate.
 	Readme(ReadmeArgs),
+	/// Build a skeleton incrementally.
+	Skelebuild(SkelebuildArgs),
 }
 
 #[derive(Parser)]
@@ -609,6 +630,20 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			run_list(&args.common, &args, &rs)
 		}
 		Command::Readme(args) => run_readme(&args.common, &args),
+		Command::Skelebuild(args) => {
+			let rs = build_ripdoc(&args.common);
+			ripdoc::skelebuild::run_skelebuild(
+				args.target,
+				args.output,
+				args.reset,
+				&rs,
+				args.common.no_default_features,
+				args.common.all_features,
+				args.common.features.clone(),
+				args.common.private,
+			)?;
+			Ok(())
+		}
 	}
 }
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]

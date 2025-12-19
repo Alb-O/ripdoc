@@ -10,6 +10,9 @@ pub mod cargo_utils;
 /// Rendering logic that converts rustdoc data into skeleton Rust code.
 pub mod render;
 
+/// Pseudo-interactive skeleton builder.
+pub mod skelebuild;
+
 /// Core API for ripdoc operations.
 pub mod core_api;
 

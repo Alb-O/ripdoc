@@ -11,6 +11,8 @@ pub enum RipdocError {
 	Render(crate::render::error::RipdocError),
 	/// Failed to encode or decode JSON.
 	Serialization(SerdeError),
+	/// Failed to perform IO operations.
+	Io(std::io::Error),
 	/// Invalid target specifications provided by the user.
 	InvalidTarget(String),
 }
@@ -21,6 +23,7 @@ impl fmt::Display for RipdocError {
 			Self::Cargo(err) => write!(f, "{err}"),
 			Self::Render(err) => write!(f, "{err}"),
 			Self::Serialization(err) => write!(f, "{err}"),
+			Self::Io(err) => write!(f, "{err}"),
 			Self::InvalidTarget(message) => write!(f, "{message}"),
 		}
 	}
@@ -32,6 +35,7 @@ impl std::error::Error for RipdocError {
 			Self::Cargo(err) => Some(err),
 			Self::Render(err) => Some(err),
 			Self::Serialization(err) => Some(err),
+			Self::Io(err) => Some(err),
 			Self::InvalidTarget(_) => None,
 		}
 	}
@@ -52,6 +56,12 @@ impl From<crate::render::error::RipdocError> for RipdocError {
 impl From<SerdeError> for RipdocError {
 	fn from(err: SerdeError) -> Self {
 		Self::Serialization(err)
+	}
+}
+
+impl From<std::io::Error> for RipdocError {
+	fn from(err: std::io::Error) -> Self {
+		Self::Io(err)
 	}
 }
 
