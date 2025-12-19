@@ -147,7 +147,10 @@ struct ReadmeArgs {
 #[derive(Args, Clone)]
 /// Arguments for the `skelebuild` subcommand.
 struct SkelebuildArgs {
-	/// Target to add to the skeleton.
+	#[command(subcommand)]
+	command: Option<SkelebuildSubcommand>,
+
+	/// Target to add (shorthand for 'add').
 	target: Option<String>,
 
 	/// Output file for the skeleton.
@@ -161,6 +164,24 @@ struct SkelebuildArgs {
 	#[command(flatten)]
 	/// Common arguments for configuring Ripdoc.
 	common: CommonArgs,
+}
+
+#[derive(Subcommand, Clone)]
+enum SkelebuildSubcommand {
+	/// Add a target to the skeleton.
+	Add {
+		/// Target to add.
+		target: String,
+	},
+	/// Remove a target from the skeleton.
+	Remove {
+		/// Target to remove.
+		target: String,
+	},
+	/// Clear all targets and reset state.
+	Reset,
+	/// Show current targets and output path.
+	Status,
 }
 
 #[derive(Subcommand, Clone)]
@@ -631,17 +652,25 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 		}
 		Command::Readme(args) => run_readme(&args.common, &args),
 		Command::Skelebuild(args) => {
+			use ripdoc::skelebuild::SkeleAction;
 			let rs = build_ripdoc(&args.common);
-			ripdoc::skelebuild::run_skelebuild(
-				args.target,
-				args.output,
-				args.reset,
-				&rs,
-				args.common.no_default_features,
-				args.common.all_features,
-				args.common.features.clone(),
-				args.common.private,
-			)?;
+			
+			let action = if args.reset {
+				Some(SkeleAction::Reset)
+			} else if let Some(cmd) = args.command {
+				match cmd {
+					SkelebuildSubcommand::Add { target } => Some(SkeleAction::Add(target)),
+					SkelebuildSubcommand::Remove { target } => Some(SkeleAction::Remove(target)),
+					SkelebuildSubcommand::Reset => Some(SkeleAction::Reset),
+					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
+				}
+			} else if let Some(target) = args.target {
+				Some(SkeleAction::Add(target))
+			} else {
+				None
+			};
+
+			ripdoc::skelebuild::run_skelebuild(action, args.output, &rs)?;
 			Ok(())
 		}
 	}

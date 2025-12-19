@@ -1,12 +1,15 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use crate::core_api::{Result, Ripdoc};
+use crate::core_api::search::{SearchOptions, SearchDomain, SearchIndex, build_render_selection};
+use crate::render::Renderer;
 
 /// State of an ongoing skeleton build.
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SkeleState {
-	/// Path to the output file where skeletonized code is appended.
+	/// Path to the output file where skeletonized code is written.
 	pub output_path: Option<PathBuf>,
 	/// List of targets that have been added to the skeleton.
 	pub targets: Vec<String>,
@@ -47,57 +50,148 @@ impl SkeleState {
 		fs::write(path, content)?;
 		Ok(())
 	}
+
+	/// Rebuilds the skeleton file from scratch using all stored targets.
+	pub fn rebuild(&self, ripdoc: &Ripdoc) -> Result<()> {
+		let output_path = self.output_path.clone().unwrap_or_else(|| PathBuf::from("skeleton.md"));
+		
+		if self.targets.is_empty() {
+			fs::write(&output_path, "// No targets added to skeleton.\n")?;
+			return Ok(());
+		}
+
+		// Map of package_root -> (resolved_target, sub_targets)
+		let mut crate_selections = HashMap::new();
+
+		use crate::cargo_utils::resolve_target;
+		for target_str in &self.targets {
+			let resolved = resolve_target(target_str, false)?;
+			for rt in resolved {
+				let key = rt.package_root().to_path_buf();
+				let entry = crate_selections.entry(key).or_insert_with(|| (rt, Vec::new()));
+				entry.1.push(target_str.clone());
+			}
+		}
+
+		let mut rendered_crates = Vec::new();
+
+		for (rt, targets) in crate_selections.into_values() {
+			let crate_data = rt.read_crate(
+				false, // no_default_features
+				false, // all_features
+				vec![], // features
+				true, // private_items
+				true, // silent
+				&crate::cargo_utils::CacheConfig::default(),
+			)?;
+
+			let index = SearchIndex::build(&crate_data, true, Some(rt.package_root()));
+			
+			let mut all_results = Vec::new();
+			for t in &targets {
+				let mut options = SearchOptions::new(t);
+				options.include_private = true;
+				options.domains = SearchDomain::PATHS;
+				
+				let results = index.search(&options);
+				
+				// If exact path match failed, try matching without the crate name prefix
+				if results.is_empty() {
+					if let Ok(parsed) = crate::cargo_utils::target::Target::parse(&t) {
+						let query = parsed.path.join("::");
+						if !query.is_empty() {
+							let mut fallback_options = SearchOptions::new(&query);
+							fallback_options.include_private = true;
+							fallback_options.domains = SearchDomain::PATHS;
+							all_results.extend(index.search(&fallback_options));
+						}
+					}
+				} else {
+					all_results.extend(results);
+				}
+			}
+
+			if all_results.is_empty() {
+				println!("Warning: No items found for targets: {:?}", targets);
+				continue;
+			}
+
+			let selection = build_render_selection(&index, &all_results, true);
+			let renderer = Renderer::default()
+				.with_format(ripdoc.render_format())
+				.with_private_items(true)
+				.with_selection(selection);
+			
+			let mut rendered = renderer.render(&crate_data)?;
+			
+			if let Some(ref name) = rt.package_name {
+				rendered = format!("// Package: {}\n{}", name, rendered);
+			}
+			
+			rendered_crates.push(rendered);
+		}
+
+		let final_output = rendered_crates.join("\n\n// ---\n\n");
+		fs::write(&output_path, final_output)?;
+		
+		Ok(())
+	}
+}
+
+/// Action to perform on the skelebuild state.
+pub enum SkeleAction {
+	/// Add a target.
+	Add(String),
+	/// Remove a target.
+	Remove(String),
+	/// Reset state.
+	Reset,
+	/// Show status.
+	Status,
 }
 
 /// Executes the skelebuild subcommand.
 pub fn run_skelebuild(
-	target: Option<String>,
+	action: Option<SkeleAction>,
 	output: Option<PathBuf>,
-	reset: bool,
 	ripdoc: &Ripdoc,
-	no_default_features: bool,
-	all_features: bool,
-	features: Vec<String>,
-	private_items: bool,
 ) -> Result<()> {
-	let mut state = if reset {
-		SkeleState::default()
-	} else {
-		SkeleState::load()
-	};
+	let mut state = SkeleState::load();
 
-	if let Some(out) = output {
-		state.output_path = Some(out);
+	if let Some(ref out) = output {
+		state.output_path = Some(out.clone());
 	}
 
-	let output_path = state.output_path.clone().unwrap_or_else(|| PathBuf::from("skeleton.rs"));
-
-	if let Some(target_str) = target {
-		let rendered = ripdoc.render(
-			&target_str,
-			no_default_features,
-			all_features,
-			features,
-			private_items,
-		)?;
-
-		// Append to the file
-		use std::io::Write;
-		let mut file = fs::OpenOptions::new()
-			.create(true)
-			.append(true)
-			.open(&output_path)?;
-		
-		writeln!(file, "\n// Target: {}\n{}", target_str, rendered)?;
-		
-		state.targets.push(target_str);
-		println!("Added target to {}", output_path.display());
-	} else {
-		println!("Current skelebuild state:");
-		println!("  Output: {}", output_path.display());
-		println!("  Targets: {:?}", state.targets);
+	match action {
+		Some(SkeleAction::Add(target_str)) => {
+			if !state.targets.contains(&target_str) {
+				state.targets.push(target_str.clone());
+				println!("Added target: {}", target_str);
+			}
+		}
+		Some(SkeleAction::Remove(target_str)) => {
+			state.targets.retain(|t| t != &target_str);
+			println!("Removed target: {}", target_str);
+		}
+		Some(SkeleAction::Reset) => {
+			state = SkeleState::default();
+			if let Some(ref out) = output {
+				state.output_path = Some(out.clone());
+			}
+			println!("State reset.");
+		}
+		Some(SkeleAction::Status) | None => {
+			// Just showing status or falling through to rebuild
+		}
 	}
 
+	state.rebuild(ripdoc)?;
 	state.save()?;
+
+	let output_path = state.output_path.clone().unwrap_or_else(|| PathBuf::from("skeleton.md"));
+	println!("Skeleton state:");
+	println!("  Output: {}", output_path.display());
+	println!("  Targets: {:?}", state.targets);
+
 	Ok(())
 }

@@ -145,6 +145,11 @@ impl Ripdoc {
 		self
 	}
 
+	/// Returns the currently configured render format.
+	pub fn render_format(&self) -> RenderFormat {
+		self.render_format
+	}
+
 	/// Returns the parsed representation of the crate's API.
 	///
 	/// # Arguments
