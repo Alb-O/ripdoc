@@ -131,6 +131,14 @@ struct PrintArgs {
 	#[arg(short = 's', long)]
 	search: Option<String>,
 
+	/// Include the elided source implementation for matched items.
+	#[arg(long, default_value_t = false)]
+	implementation: bool,
+
+	/// Include the literal, unelided source code for the containing file.
+	#[arg(long, alias = "source", default_value_t = false)]
+	raw_source: bool,
+
 	#[command(flatten)]
 	filters: SearchFilterArgs,
 
@@ -162,9 +170,9 @@ struct SkelebuildArgs {
 	#[arg(long)]
 	reset: bool,
 
-	/// Flatten the output (skip module nesting).
+	/// Plain output (skip module nesting).
 	#[arg(long)]
-	flat: bool,
+	plain: bool,
 
 	#[command(flatten)]
 	/// Common arguments for configuring Ripdoc.
@@ -178,17 +186,21 @@ enum SkelebuildSubcommand {
 		/// Target to add.
 		target: String,
 
-		/// Include the full source code for this item.
-		#[arg(short = 'f', long, default_value_t = false)]
-		full: bool,
+		/// Include the elided source implementation for this item.
+		#[arg(long, default_value_t = false)]
+		implementation: bool,
+
+		/// Include the literal, unelided source code for the containing file.
+		#[arg(short = 's', long, alias = "source", default_value_t = false)]
+		raw_source: bool,
 
 		/// Output file for the skeleton.
 		#[arg(short = 'O', long)]
 		output: Option<std::path::PathBuf>,
 
-		/// Flatten the output.
+		/// Plain output (skip module nesting).
 		#[arg(long)]
-		flat: bool,
+		plain: bool,
 	},
 	/// Inject manual commentary.
 	Inject {
@@ -221,6 +233,10 @@ enum SkelebuildSubcommand {
 		/// Output file for the skeleton.
 		#[arg(short = 'O', long)]
 		output: Option<std::path::PathBuf>,
+
+		/// Plain output (skip module nesting).
+		#[arg(long)]
+		plain: bool,
 	},
 	/// Show current targets and output path.
 	Status,
@@ -356,9 +372,11 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 			common.all_features,
 			common.features.clone(),
 			&options,
+			args.implementation,
+			args.raw_source,
 		)?;
 
-		if response.results.is_empty() {
+		if response.results.is_empty() && response.rendered.is_empty() {
 			println!("No matches found for \"{}\".", trimmed);
 			return Ok(());
 		}
@@ -378,6 +396,8 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 			common.all_features,
 			common.features.clone(),
 			common.private,
+			args.implementation,
+			args.raw_source,
 		)?;
 
 		println!("{output}");
@@ -701,7 +721,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			let rs = build_ripdoc(&args.common);
 
 			let mut output = args.output;
-			let mut flat = args.flat;
+			let mut plain = args.plain;
 
 			let action = if args.reset {
 				Some(SkeleAction::Reset)
@@ -709,17 +729,22 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				match cmd {
 					SkelebuildSubcommand::Add {
 						target,
-						full,
+						implementation,
+						raw_source,
 						output: o,
-						flat: f,
+						plain: p,
 					} => {
 						if o.is_some() {
 							output = o;
 						}
-						if f {
-							flat = f;
+						if p {
+							plain = p;
 						}
-						Some(SkeleAction::Add { target, full })
+						Some(SkeleAction::Add {
+							target,
+							implementation,
+							raw_source,
+						})
 					}
 					SkelebuildSubcommand::Inject {
 						content,
@@ -738,9 +763,12 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Remove(target))
 					}
-					SkelebuildSubcommand::Reset { output: o } => {
+					SkelebuildSubcommand::Reset { output: o, plain: p } => {
 						if o.is_some() {
 							output = o;
+						}
+						if p {
+							plain = p;
 						}
 						Some(SkeleAction::Reset)
 					}
@@ -751,7 +779,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				None
 			};
 
-			ripdoc::skelebuild::run_skelebuild(action, output, flat, &rs)?;
+			ripdoc::skelebuild::run_skelebuild(action, output, plain, &rs)?;
 			Ok(())
 		}
 

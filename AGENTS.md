@@ -11,12 +11,13 @@
 - Private/auto trait details: add `--private` and/or `--auto-impls`
 - Feature gating flags work the same as with cargo
 - Source tracing: Injects `### Source: path/to/file.rs` labels on file transitions (disable with `--no-source-labels`)
-- Stateful skeleton builder: `ripdoc skelebuild add [target] [--full]`
+- Stateful skeleton builder: `ripdoc skelebuild add [target] [--implementation]`
   - Incrementally builds a custom "source map" (default `skeleton.md`)
-  - Mix API outlines with full source code (`--full`) while preserving crate hierarchy
+  - Mix API outlines with full source code (`--implementation`) while preserving crate hierarchy
   - CRUD ops: `add`, `remove`, `reset`, `status`, `rebuild`
   - Items are deduplicated: re-exported items are only rendered at their first occurrence
   - Shared visited set prevents redundant rendering across multiple targets in a build
-  - `reset` preserves output path and `--flat` setting; only clears entries
+  - `reset` preserves output path and `--plain` setting; only clears entries
   - `inject --at <index>` is the most reliable way to interleave commentary
   - **Shell quoting**: Use single quotes for `inject` content containing `()` or special chars
+- Literal source extraction: Add `--source` or `--raw-source` to `print` or `skelebuild add` to get unmodified file content.

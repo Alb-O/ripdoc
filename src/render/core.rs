@@ -1,36 +1,36 @@
 use std::collections::HashSet;
 
+use crate::render::markdown;
+use crate::render::utils::dedup_gap_markers;
 use rust_format::{Config, Formatter, RustFmt};
 use rustdoc_types::{Crate, Id};
 
 use super::error::Result;
-use super::markdown;
-use super::utils::dedup_gap_markers;
 
-/// Supported high-level output formats.
+/// Configuration for a render pass, specifying which items to include and how to format them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderFormat {
-	/// Render the crate as formatted Rust code (default).
+	/// Format as valid Rust source code.
 	Rust,
-	/// Render the crate using a Markdown-friendly layout.
+	/// Format as Markdown documentation.
 	Markdown,
 }
 
-/// Selection of item identifiers used when rendering subsets of a crate.
+/// Selection of items to be rendered from a crate.
 #[derive(Debug, Clone, Default)]
 pub struct RenderSelection {
-	/// Item identifiers that directly satisfied the search query.
+	/// Items that were explicitly matched by a query.
 	matches: HashSet<Id>,
-	/// Ancestor identifiers retained to preserve module hierarchy in output.
+	/// Items that should be included for context (ancestors).
 	context: HashSet<Id>,
-	/// Matched containers whose children should be fully expanded.
+	/// Items that should be fully expanded (all children rendered).
 	expanded: HashSet<Id>,
-	/// Item identifiers that should be rendered with their full source code.
+	/// Items that should be rendered with their full source code.
 	full_source: HashSet<Id>,
 }
 
 impl RenderSelection {
-	/// Create a selection from explicit match and context sets.
+	/// Create a new render selection.
 	pub fn new(
 		matches: HashSet<Id>,
 		mut context: HashSet<Id>,
@@ -49,6 +49,11 @@ impl RenderSelection {
 			expanded,
 			full_source,
 		}
+	}
+
+	/// Create a selection that includes everything in the crate.
+	pub fn all() -> Self {
+		Self::default()
 	}
 
 	/// Identifiers for items that should be fully rendered.
@@ -90,8 +95,8 @@ pub struct Renderer {
 	pub selection: Option<RenderSelection>,
 	/// Optional root path for resolving relative source files.
 	pub source_root: Option<std::path::PathBuf>,
-	/// Whether to flatten the output (skip module nesting).
-	pub flat: bool,
+	/// Whether to use plain output (skip module nesting).
+	pub plain: bool,
 	/// Optional initial source file to suppress redundant headers.
 	pub initial_current_file: Option<std::path::PathBuf>,
 	/// Optional persistent visited set to avoid redundant item rendering across calls.
@@ -120,10 +125,16 @@ impl Renderer {
 			filter: String::new(),
 			selection: None,
 			source_root: None,
-			flat: false,
+			plain: false,
 			initial_current_file: None,
 			visited: None,
 		}
+	}
+
+	/// Toggle plain output mode (skips module nesting).
+	pub fn with_plain(mut self, plain: bool) -> Self {
+		self.plain = plain;
+		self
 	}
 
 	/// Apply a filter to output. The filter is a path BELOW the outermost module.
@@ -165,12 +176,6 @@ impl Renderer {
 	/// Set the source root for resolving relative paths.
 	pub fn with_source_root(mut self, root: std::path::PathBuf) -> Self {
 		self.source_root = Some(root);
-		self
-	}
-
-	/// Toggle flattening of the output.
-	pub fn with_flat(mut self, flat: bool) -> Self {
-		self.flat = flat;
 		self
 	}
 

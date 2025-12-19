@@ -1,11 +1,14 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use crate::core_api::search::{SearchDomain, SearchIndex, SearchOptions, build_render_selection};
+use crate::cargo_utils::resolve_target;
 use crate::core_api::error::RipdocError;
+use crate::core_api::search::{
+	SearchDomain, SearchIndex, SearchOptions, build_render_selection,
+};
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
 
@@ -16,8 +19,8 @@ pub struct SkeleState {
 	pub output_path: Option<PathBuf>,
 	/// List of entries (targets or manual injections) in the skeleton.
 	pub entries: Vec<SkeleEntry>,
-	/// Whether to flatten the output (skip module nesting).
-	pub flat: bool,
+	/// Whether to use plain output (skip module nesting).
+	pub plain: bool,
 }
 
 /// An entry in the skeleton build.
@@ -35,8 +38,11 @@ pub enum SkeleEntry {
 pub struct SkeleTarget {
 	/// The target path (e.g., "ratatui::widgets::Block").
 	pub path: String,
-	/// Whether to include the full source code.
-	pub full: bool,
+	/// Whether to include the elided source implementation.
+	pub implementation: bool,
+	/// Whether to include the literal, unelided source code.
+	#[serde(default)]
+	pub raw_source: bool,
 }
 
 /// A manual text injection.
@@ -83,22 +89,16 @@ impl SkeleState {
 	}
 
 	/// Rebuilds the skeleton file from scratch using all stored entries.
-	pub fn rebuild(&self, ripdoc: &Ripdoc) -> Result<()> {
+	pub fn rebuild(&self, _ripdoc: &Ripdoc) -> Result<()> {
 		let output_path = self
 			.output_path
 			.clone()
 			.unwrap_or_else(|| PathBuf::from("skeleton.md"));
 
-		if self.entries.is_empty() {
-			fs::write(&output_path, "// No entries in skeleton.\n")?;
-			return Ok(());
-		}
+		// Pre-load all crates to avoid redundant work.
+		let mut crates_data: HashMap<PathBuf, rustdoc_types::Crate> = HashMap::new();
 
-		// Pre-load all crates to avoid redundant I/O
-		let mut crates_data = HashMap::new();
-		use crate::cargo_utils::resolve_target;
-
-		// Group sequential targets of the same crate to avoid redundant headers and chopy output.
+		// Group sequential targets of the same crate to avoid redundant headers and choppy output.
 		let mut grouped_entries: Vec<SkeleGroup> = Vec::new();
 		for entry in &self.entries {
 			match entry {
@@ -150,112 +150,80 @@ impl SkeleState {
 
 		for group in grouped_entries {
 			match group {
+				SkeleGroup::Injection(content) => {
+					final_output.push_str(&content);
+					final_output.push_str("\n\n");
+				}
 				SkeleGroup::Targets { pkg_root, targets } => {
 					let crate_data = crates_data.get(&pkg_root).unwrap();
-					let index = SearchIndex::build(crate_data, true, Some(&pkg_root));
+					let mut full_source = HashSet::new();
+					let mut raw_files = HashSet::new();
+					let mut queries = Vec::new();
 
-					let mut all_results = Vec::new();
-					let mut full_source_ids = std::collections::HashSet::new();
-
-					for t in &targets {
-						let mut options = SearchOptions::new(&t.path);
-						options.include_private = true;
-						options.domains = SearchDomain::PATHS;
-						let results = index.search(&options);
-
-						let final_results = if results.is_empty() {
-							if let Ok(parsed) = crate::cargo_utils::target::Target::parse(&t.path) {
-								let query = parsed.path.join("::");
-								if !query.is_empty() {
-									let mut fallback_options = SearchOptions::new(&query);
-									fallback_options.include_private = true;
-									fallback_options.domains = SearchDomain::PATHS;
-									fallback_options.case_sensitive = true;
-									index.search(&fallback_options)
-								} else {
-									Vec::new()
-								}
-							} else {
-								Vec::new()
-							}
-						} else {
-							results
-						};
-
-						for res in &final_results {
-							if t.full && res.kind != crate::core_api::SearchItemKind::Crate {
-								full_source_ids.insert(res.item_id);
+					for target in targets {
+						if target.raw_source {
+							let mut options = SearchOptions::new(&target.path);
+							options.domains = SearchDomain::PATHS;
+							let results = SearchIndex::build(crate_data, true, Some(&pkg_root))
+								.search(&options);
+							for res in results {
 								if let Some(item) = crate_data.index.get(&res.item_id) {
-									match &item.inner {
-										rustdoc_types::ItemEnum::Struct(s) => {
-											full_source_ids.extend(s.impls.iter().copied());
-										}
-										rustdoc_types::ItemEnum::Enum(e) => {
-											full_source_ids.extend(e.impls.iter().copied());
-										}
-										rustdoc_types::ItemEnum::Trait(tr) => {
-											full_source_ids.extend(tr.items.iter().copied());
-										}
-										rustdoc_types::ItemEnum::Use(u) => {
-											if let Some(id) = &u.id {
-												full_source_ids.insert(*id);
-												// Recursively find impls for the imported item if it's a struct/enum/trait
-												if let Some(imported) = crate_data.index.get(id) {
-													match &imported.inner {
-														rustdoc_types::ItemEnum::Struct(s) => {
-															full_source_ids.extend(s.impls.iter().copied());
-														}
-														rustdoc_types::ItemEnum::Enum(e) => {
-															full_source_ids.extend(e.impls.iter().copied());
-														}
-														rustdoc_types::ItemEnum::Trait(tr) => {
-															full_source_ids.extend(tr.items.iter().copied());
-														}
-														_ => {}
-													}
-												}
-											}
-										}
-										_ => {}
+									if let Some(span) = &item.span {
+										raw_files.insert(span.filename.clone());
 									}
 								}
 							}
-							all_results.push(res.clone());
+						} else if target.implementation {
+							let mut options = SearchOptions::new(&target.path);
+							options.domains = SearchDomain::PATHS;
+							let results = SearchIndex::build(crate_data, true, Some(&pkg_root))
+								.search(&options);
+							for res in results {
+								full_source.insert(res.item_id);
+							}
+						} else {
+							queries.push(target.path);
 						}
 					}
 
-					if all_results.is_empty() {
-						continue;
+					// Append raw files first if any
+					for file_path in raw_files {
+						let abs_path = if file_path.is_absolute() {
+							file_path.clone()
+						} else {
+							pkg_root.join(&file_path)
+						};
+						if let Ok(content) = fs::read_to_string(&abs_path) {
+							final_output.push_str(&format!(
+								"// ripdoc:source: {}\n\n{}\n\n",
+								file_path.display(),
+								content
+							));
+						}
 					}
 
-					let selection = build_render_selection(&index, &all_results, true, full_source_ids);
-					let renderer = Renderer::default()
-						.with_format(ripdoc.render_format())
-						.with_private_items(true)
-						.with_source_labels(ripdoc.render_source_labels())
+					let mut search_options = SearchOptions::new(&queries.join("|"));
+					search_options.domains = SearchDomain::PATHS;
+					let index = SearchIndex::build(crate_data, true, Some(&pkg_root));
+					let search_results = index.search(&search_options);
+					let selection = build_render_selection(
+						&index,
+						&search_results,
+						true,
+						full_source,
+					);
+
+					let renderer = Renderer::new()
+						.with_format(crate::render::RenderFormat::Markdown)
 						.with_selection(selection)
 						.with_source_root(pkg_root.clone())
-						.with_flat(self.flat)
+						.with_plain(self.plain)
 						.with_current_file(last_file.clone())
 						.with_visited(global_visited.clone());
 
 					let (rendered, final_file) = renderer.render_ext(crate_data)?;
 					last_file = final_file;
-
-					if !rendered.trim().is_empty() {
-						if !final_output.is_empty() {
-							final_output.push_str("\n\n---\n\n");
-						}
-						final_output.push_str(&rendered);
-					}
-				}
-				SkeleGroup::Injection(content) => {
-					if !final_output.is_empty() {
-						final_output.push_str("\n\n");
-					}
-					final_output.push_str(&content);
-					final_output.push('\n');
-					// We don't reset last_file here because manual comments don't change the source file context
+					final_output.push_str(&rendered);
 				}
 			}
 		}
@@ -279,8 +247,10 @@ pub enum SkeleAction {
 	Add {
 		/// Target path to add.
 		target: String,
-		/// Whether to include full source code.
-		full: bool,
+		/// Whether to include elided source implementation.
+		implementation: bool,
+		/// Whether to include literal, unelided source.
+		raw_source: bool,
 	},
 	/// Inject manual commentary.
 	Inject {
@@ -303,7 +273,7 @@ pub enum SkeleAction {
 pub fn run_skelebuild(
 	action: Option<SkeleAction>,
 	output: Option<PathBuf>,
-	flat: bool,
+	plain: bool,
 	ripdoc: &Ripdoc,
 ) -> Result<()> {
 	let mut state = SkeleState::load();
@@ -311,24 +281,30 @@ pub fn run_skelebuild(
 	if let Some(ref out) = output {
 		state.output_path = Some(out.clone());
 	}
-	if flat {
-		state.flat = true;
+	if plain {
+		state.plain = true;
 	}
 
 	match action {
-		Some(SkeleAction::Add { target, full }) => {
+		Some(SkeleAction::Add {
+			target,
+			implementation,
+			raw_source,
+		}) => {
 			if !state.entries.iter().any(|e| match e {
 				SkeleEntry::Target(t) => t.path == target,
 				_ => false,
 			}) {
 				state.entries.push(SkeleEntry::Target(SkeleTarget {
 					path: target.clone(),
-					full,
+					implementation,
+					raw_source,
 				}));
 				println!(
-					"Added target: {} (full: {})",
+					"Added target: {} (implementation: {}, raw_source: {})",
 					target,
-					if full { "yes" } else { "no" }
+					if implementation { "yes" } else { "no" },
+					if raw_source { "yes" } else { "no" }
 				);
 			}
 		}
@@ -365,11 +341,10 @@ pub fn run_skelebuild(
 
 					match matches.as_slice() {
 						[] => {
-						return Err(RipdocError::InvalidTarget(format!(
-							"No entry matches --after '{}'. Use `ripdoc skelebuild status` to see indices, then use `inject --at <index>`.",
-							after_key
-						)));
-
+							return Err(RipdocError::InvalidTarget(format!(
+								"No entry matches --after '{}'. Use `ripdoc skelebuild status` to see indices, then use `inject --at <index>`.",
+								after_key
+							)));
 						}
 						[only] => {
 							let insert_at = only + 1;
@@ -377,11 +352,10 @@ pub fn run_skelebuild(
 							println!("Injected commentary after entry #{only}.");
 						}
 						_ => {
-						return Err(RipdocError::InvalidTarget(format!(
-							"Ambiguous --after '{}': matches entries {:?}. Use `inject --at <index>`.",
-							after_key, matches
-						)));
-
+							return Err(RipdocError::InvalidTarget(format!(
+								"Ambiguous --after '{}': matches entries {:?}. Use `inject --at <index>`.",
+								after_key, matches
+							)));
 						}
 					}
 				}
@@ -398,13 +372,13 @@ pub fn run_skelebuild(
 			println!("Removed entry: {}", target_str);
 		}
 		Some(SkeleAction::Reset) => {
-			// Preserve output path and flat setting from previous state unless overridden
+			// Preserve output path and plain setting from previous state unless overridden
 			let prev_output = state.output_path.clone();
-			let prev_flat = state.flat;
+			let prev_plain = state.plain;
 			state = SkeleState::default();
 			state.output_path = output.clone().or(prev_output);
-			state.flat = flat || prev_flat;
-			println!("State reset (entries cleared, output/flat preserved).");
+			state.plain = plain || prev_plain;
+			println!("State reset (entries cleared, output/plain preserved).");
 		}
 		Some(SkeleAction::Status) | None => {
 			// Just showing status or falling through to rebuild
@@ -421,14 +395,17 @@ pub fn run_skelebuild(
 	println!("Skeleton state:");
 	println!("  State file: {}", SkeleState::state_file().display());
 	println!("  Output: {}", output_path.display());
-	println!("  Flat: {}", state.flat);
+	println!("  Plain mode: {}", state.plain);
 	println!("  Entries: {}", state.entries.len());
 	println!("  Tip: use `inject --at <index>` to avoid brittle matching.");
 	println!("  Entry list:");
 	for (idx, e) in state.entries.iter().enumerate() {
 		match e {
 			SkeleEntry::Target(t) => {
-				println!("    {idx}: [Target] {} (full: {})", t.path, t.full)
+				println!(
+					"    {idx}: [Target] {} (impl: {}, raw: {})",
+					t.path, t.implementation, t.raw_source
+				)
 			}
 			SkeleEntry::Injection(i) => {
 				let trimmed = i.content.trim();

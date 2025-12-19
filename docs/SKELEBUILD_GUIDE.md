@@ -5,12 +5,12 @@
 ## Step-by-Step Example: Mapping the `bat` Crate
 
 ### 1. Initialize with Structural Outlines
-Start by defining your output file. Use the `--flat` flag if you want to skip the `pub mod` hierarchy and produce a cleaner, flatter document.
+Start by defining your output file. Use the `--plain` flag if you want to skip the `pub mod` hierarchy and produce a cleaner, linear document.
 
 ```bash
 ripdoc skelebuild reset
-# Note: Flags like --output can be placed anywhere in the command
-ripdoc skelebuild add bat::config::Config --flat --output bat_map.md
+# Note: Flags like --output and --plain can be placed anywhere in the command
+ripdoc skelebuild add bat::config::Config --plain --output bat_map.md
 ```
 
 **Expected Output (`bat_map.md`):**
@@ -25,12 +25,12 @@ pub struct Config<'a> {
 ```
 
 ### 2. Inject Core Logic
-When you need to see the internal implementation of a specific component, use the `--full` (or `-f`) flag on `skelebuild add`. `ripdoc` will extract the actual source code and associated `impl` blocks from the disk.
+When you need to see the internal implementation of a specific component, use the `--implementation` flag on `skelebuild add`. `ripdoc` will extract the elided source code and associated `impl` blocks from the disk.
 
-> `--full` is a `skelebuild add` flag (not a `ripdoc print` flag).
+> `--implementation` is a `skelebuild add` flag (not a `ripdoc print` flag).
 
 ```bash
-ripdoc skelebuild add bat::controller::Controller::run --full
+ripdoc skelebuild add bat::controller::Controller::run --implementation
 ```
 
 **Updated Output (`bat_map.md`):**
@@ -97,24 +97,24 @@ ripdoc skelebuild rebuild
 # Remove a specific entry by its target path or injection content
 ripdoc skelebuild remove bat::assets::get_acknowledgements
 
-# Reset clears entries but PRESERVES output path and --flat setting
+# Reset clears entries but PRESERVES output path and --plain setting
 ripdoc skelebuild reset
 ```
 
-> **Note**: `reset` clears all entries but preserves your `--output` and `--flat` configuration from the previous session. To fully reset everything, delete the state file at `~/.local/state/ripdoc/skelebuild.json`.
+> **Note**: `reset` clears all entries but preserves your `--output` and `--plain` configuration from the previous session. To fully reset everything, delete the state file at `~/.local/state/ripdoc/skelebuild.json`.
 
 ## Features
 
-- **Flattening (`--flat`)**: Skips the recursive `pub mod` wrapping for a more readable, highlight-oriented document.
-- **Lazy Flagging**: Flags like `--output`, `--format`, and `--flat` can be placed anywhere in the command string.
-- **Automatic Impl Tracking**: Adding a struct or enum with `--full` automatically marks its associated `impl` blocks for injection.
+- **Plain Output (`--plain`)**: Skips the recursive `pub mod` wrapping for a more readable, highlight-oriented document.
+- **Lazy Flagging**: Flags like `--output`, `--format`, and `--plain` can be placed anywhere in the command string.
+- **Automatic Impl Tracking**: Adding a struct or enum with `--implementation` automatically marks its associated `impl` blocks for injection.
 - **Manual Injection**: Interleave your own Markdown commentary into the stateful build without it being overwritten.
 - **Item Deduplication**: Items are only rendered once; re-exports and glob imports skip already-visited items to avoid redundancy.
 - **Shared Visited Set**: Across all targets in a single build, a global visited set ensures items reachable through multiple paths (e.g., prelude re-exports) appear exactly once.
 
 ## Technical Summary
 
-`skelebuild` leverages `rustdoc` JSON to resolve item spans and `SearchIndex` to preserve (or flatten) hierarchy. When `--full` is active:
+`skelebuild` leverages `rustdoc` JSON to resolve item spans and `SearchIndex` to preserve (or flatten) hierarchy. When `--implementation` is active:
 1. `ripdoc` identifies the target's `Id` and associated `impl` IDs.
 2. The physical `.rs` file is read (using workspace-aware path heuristics).
 3. The source is sliced using line/column `Span` metadata.
@@ -125,14 +125,15 @@ ripdoc skelebuild reset
 A **shared visited set** (`Arc<Mutex<HashSet<Id>>>`) spans all renderer instances in a single build. This ensures:
 - Items reached through multiple paths (e.g., a struct defined in a private module and re-exported publicly) are only rendered once.
 - Visibility is checked **before** descending into containers, so items inside private modules aren't prematurely marked as visited.
-- When an `impl` block is matched, its target struct and ancestors are automatically added to the render context to prevent orphaned impl blocks in `--flat` mode.
+- When an `impl` block is matched, its target struct and ancestors are automatically added to the render context to prevent orphaned impl blocks in `--plain` mode.
 
-### Intelligent Elision with `--full`
+### Intelligent Elision with `--implementation`
 
-Even with `--full`, ripdoc performs **intelligent slicing** rather than raw file concatenation:
+Even with `--implementation`, ripdoc performs **intelligent slicing** rather than raw file concatenation:
 - The full implementation of the **target item** (struct, function, impl block) is extracted.
 - Unrelated module-level code (imports, sibling items, private helpers) is elided with `// ...` markers.
 - This keeps the skeleton focused on the requested API surface while preserving implementation details where they matter.
 
-If you need the complete, unmodified source of a file, use `ripdoc print <crate>::<module> --full` directly instead of skelebuild.
+### Literal Extraction with `--source`
 
+If you need the complete, unmodified source of a file, use the `--source` (or `--raw-source`) flag. This will extract the entire literal file content associated with the target item without any ripdoc-driven elision.

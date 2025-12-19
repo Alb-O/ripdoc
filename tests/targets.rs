@@ -34,7 +34,7 @@ mod tests {
 
 		let target = format!("{}::DummyStruct", foo_path.display());
 		let ripdoc = Ripdoc::new().with_silent(true);
-		let output = ripdoc.render(&target, false, false, Vec::new(), false)?;
+		let output = ripdoc.render(&target, false, false, Vec::new(), false, false, false)?;
 
 		assert!(output.contains("pub struct DummyStruct;"));
 

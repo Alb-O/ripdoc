@@ -211,7 +211,7 @@ pub fn render_item(
 	if !output.is_empty()
 		&& state.config.render_source_labels
 		&& !matches!(item.inner, ItemEnum::Use(_))
-		&& !(matches!(item.inner, ItemEnum::Module(_)) && state.config.flat)
+		&& !(matches!(item.inner, ItemEnum::Module(_)) && state.config.plain)
 		&& let Some(span) = &item.span
 		&& state.current_file.as_ref() != Some(&span.filename)
 	{
@@ -235,8 +235,8 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 
 	let path_prefix = ppush(path_prefix, &render_name(item));
 
-	let is_flat = state.config.flat;
-	let mut output = if is_flat {
+	let is_plain = state.config.plain;
+	let mut output = if is_plain {
 		String::new()
 	} else {
 		let mut head = format!("{}mod {} {{\n", render_vis(item), render_name(item));
@@ -251,7 +251,7 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 	};
 
 	let module = extract_item!(item, ItemEnum::Module);
-	let gaps = GapController::new(if is_flat { "" } else { "    " });
+	let gaps = GapController::new(if is_plain { "" } else { "    " });
 	gaps.begin_section(state);
 
 	for item_id in &module.items {
@@ -273,7 +273,7 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 		}
 	}
 
-	if !is_flat {
+	if !is_plain {
 		output.push_str("}\n\n");
 	}
 

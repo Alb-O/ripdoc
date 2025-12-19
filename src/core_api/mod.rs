@@ -13,6 +13,8 @@ pub mod pattern;
 /// Search and indexing utilities.
 pub mod search;
 use rustdoc_types::Crate;
+use std::collections::HashSet;
+use std::fs;
 
 pub use self::error::Result;
 pub use self::list_tree::{ListTreeNode, build_list_tree};
@@ -55,6 +57,7 @@ pub struct Ripdoc {
 
 /// Check if the rendered output is essentially empty (just an empty module declaration).
 /// This is used to detect binary-only crates with no public API.
+#[allow(dead_code)]
 fn is_empty_output(rendered: &str) -> bool {
 	// Remove all whitespace: "pub mod name {}" becomes "pubmodname{}"
 	let normalized: String = rendered.chars().filter(|c| !c.is_whitespace()).collect();
@@ -207,6 +210,8 @@ impl Ripdoc {
 		all_features: bool,
 		features: Vec<String>,
 		options: &SearchOptions,
+		implementation: bool,
+		raw_source: bool,
 	) -> Result<SearchResponse> {
 		let resolved_targets = resolve_target(target, self.offline)?;
 		let mut all_results = Vec::new();
@@ -233,11 +238,43 @@ impl Ripdoc {
 				continue;
 			}
 
+			let mut full_source_ids = HashSet::new();
+			if implementation {
+				for res in &results {
+					full_source_ids.insert(res.item_id);
+				}
+			}
+
+			let mut raw_files_content = String::new();
+			if raw_source {
+				let mut seen_files = HashSet::new();
+				for res in &results {
+					if let Some(item) = crate_data.index.get(&res.item_id) {
+						if let Some(span) = &item.span {
+							if seen_files.insert(span.filename.clone()) {
+								let abs_path = if span.filename.is_absolute() {
+									span.filename.clone()
+								} else {
+									rt.package_root().join(&span.filename)
+								};
+								if let Ok(content) = fs::read_to_string(&abs_path) {
+									raw_files_content.push_str(&format!(
+										"// ripdoc:source: {}\n\n{}\n\n",
+										span.filename.display(),
+										content
+									));
+								}
+							}
+						}
+					}
+				}
+			}
+
 			let selection = build_render_selection(
 				&index,
 				&results,
 				options.expand_containers,
-				std::collections::HashSet::new(),
+				full_source_ids,
 			);
 			let renderer = Renderer::default()
 				.with_filter(&rt.filter)
@@ -246,7 +283,11 @@ impl Ripdoc {
 				.with_source_labels(self.render_source_labels)
 				.with_format(self.render_format)
 				.with_selection(selection);
-			let rendered = renderer.render(&crate_data)?;
+			let mut rendered = renderer.render(&crate_data)?;
+
+			if !raw_files_content.is_empty() {
+				rendered = format!("{}\n---\n\n{}", raw_files_content, rendered);
+			}
 
 			all_results.extend(results);
 			all_rendered.push(rendered);
@@ -326,6 +367,8 @@ impl Ripdoc {
 		all_features: bool,
 		features: Vec<String>,
 		private_items: bool,
+		implementation: bool,
+		raw_source: bool,
 	) -> Result<String> {
 		let resolved_targets = resolve_target(target, self.offline)?;
 		let mut rendered_outputs = Vec::new();
@@ -340,35 +383,69 @@ impl Ripdoc {
 				&self.cache_config,
 			)?;
 
-			let renderer = Renderer::default()
+			let mut full_source_ids = HashSet::new();
+			let mut raw_files_content = String::new();
+
+			if implementation || raw_source {
+				let index = SearchIndex::build(&crate_data, private_items, Some(rt.package_root()));
+				let mut options = SearchOptions::new(&rt.filter);
+				options.include_private = private_items;
+				options.domains = SearchDomain::PATHS;
+				let results = index.search(&options);
+
+				if implementation {
+					for res in &results {
+						full_source_ids.insert(res.item_id);
+					}
+				}
+
+				if raw_source {
+					let mut seen_files = HashSet::new();
+					for res in &results {
+						if let Some(item) = crate_data.index.get(&res.item_id) {
+							if let Some(span) = &item.span {
+								if seen_files.insert(span.filename.clone()) {
+									let abs_path = if span.filename.is_absolute() {
+										span.filename.clone()
+									} else {
+										rt.package_root().join(&span.filename)
+									};
+									if let Ok(content) = fs::read_to_string(&abs_path) {
+										raw_files_content.push_str(&format!(
+											"// ripdoc:source: {}\n\n{}\n\n",
+											span.filename.display(),
+											content
+										));
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			let mut renderer = Renderer::default()
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)
 				.with_private_items(private_items)
 				.with_source_labels(self.render_source_labels)
 				.with_format(self.render_format);
 
+			if !full_source_ids.is_empty() {
+				let index = SearchIndex::build(&crate_data, private_items, Some(rt.package_root()));
+				let selection = build_render_selection(
+					&index,
+					&[], // No explicit search results here, we're using filter
+					true,
+					full_source_ids,
+				);
+				renderer = renderer.with_selection(selection);
+			}
+
 			let mut rendered = renderer.render(&crate_data)?;
 
-			// If the public API is essentially empty and we weren't already including private items,
-			// automatically retry with private items enabled (useful for binary-only crates)
-			if !private_items && is_empty_output(&rendered) {
-				let crate_data_private = rt.read_crate(
-					no_default_features,
-					all_features,
-					features.clone(),
-					true,
-					self.silent,
-					&self.cache_config,
-				)?;
-
-				let renderer_private = Renderer::default()
-					.with_filter(&rt.filter)
-					.with_auto_impls(self.auto_impls)
-					.with_private_items(true)
-					.with_source_labels(self.render_source_labels)
-					.with_format(RenderFormat::Rust);
-
-				rendered = renderer_private.render(&crate_data_private)?;
+			if !raw_files_content.is_empty() {
+				rendered = format!("{}\n---\n\n{}", raw_files_content, rendered);
 			}
 
 			if let Some(ref name) = rt.package_name {
@@ -379,7 +456,9 @@ impl Ripdoc {
 				rendered = format!("{header}{rendered}");
 			}
 
-			rendered_outputs.push(rendered);
+			if !rendered.trim().is_empty() {
+				rendered_outputs.push(rendered);
+			}
 		}
 
 		let separator = match self.render_format {

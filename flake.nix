@@ -23,7 +23,7 @@
         };
         ripdocPkg = pkgs.rustPlatform.buildRustPackage {
           pname = "ripdoc";
-          version = "0.3.0";
+          version = "0.4.0";
           src = pkgs.lib.cleanSource ./.;
           cargoLock = {
             lockFile = ./Cargo.lock;
