@@ -20,6 +20,20 @@ pub fn build_render_selection(
 		matches.insert(result.item_id);
 		context.insert(result.item_id);
 		context.extend(result.ancestors.iter().copied());
+
+		// Ensure that if an impl block is matched, its target struct is included in the context.
+		// This prevents "orphaned" impl blocks in flattened output.
+		if let Some(item) = index.crate_data().index.get(&result.item_id) {
+			if let rustdoc_types::ItemEnum::Impl(impl_) = &item.inner {
+				if let rustdoc_types::Type::ResolvedPath(path) = &impl_.for_ {
+					context.insert(path.id.clone());
+					// Also include ancestors of the target struct
+					if let Some(target_entry) = index.get(&path.id) {
+						context.extend(target_entry.ancestors.iter().cloned());
+					}
+				}
+			}
+		}
 	}
 	if expand_containers {
 		let containers: HashSet<Id> = results

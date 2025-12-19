@@ -105,6 +105,8 @@ gen_tests! {
                     pub use self::public_module::PrivateStruct1;
                     pub use self::public_module::PrivateStruct2;
                 "#,
+				// Items are deduplicated: rendered once inside public_module,
+				// then skipped when re-exported at the crate root.
 				output: r#"
                     pub mod public_module {
                         pub struct PublicStruct1;
@@ -112,10 +114,6 @@ gen_tests! {
                         pub struct PrivateStruct1;
                         pub struct PrivateStruct2;
                     }
-                    pub struct PublicStruct1;
-                    pub struct PublicStruct2;
-                    pub struct PrivateStruct1;
-                    pub struct PrivateStruct2;
                 "#
 			}
 		}
@@ -136,6 +134,8 @@ gen_tests! {
 
                     pub use self::public_module::*;
                 "#,
+				// Items are deduplicated: rendered once inside public_module,
+				// then skipped when re-exported at the crate root via glob.
 				output: r#"
                     pub mod public_module {
                         pub struct PublicStruct1;
@@ -143,10 +143,6 @@ gen_tests! {
                         pub struct PrivateStruct1;
                         pub struct PrivateStruct2;
                     }
-                    pub struct PublicStruct1;
-                    pub struct PublicStruct2;
-                    pub struct PrivateStruct1;
-                    pub struct PrivateStruct2;
                 "#
 			}
 		}
@@ -325,12 +321,12 @@ gen_tests! {
 
                     pub use re_export::DeepStruct;
                 "#,
+				// Items are deduplicated: rendered once inside re_export,
+				// then skipped when re-exported at the crate root.
 				output: r#"
                     pub mod re_export {
                         pub struct DeepStruct;
                     }
-
-                    pub struct DeepStruct;
                 "#
 			}
 		}

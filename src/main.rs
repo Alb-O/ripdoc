@@ -220,6 +220,8 @@ enum SkelebuildSubcommand {
 	},
 	/// Show current targets and output path.
 	Status,
+	/// Rebuild the output file without adding anything.
+	Rebuild,
 }
 
 #[derive(Subcommand, Clone)]
@@ -738,6 +740,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						Some(SkeleAction::Reset)
 					}
 					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
+					SkelebuildSubcommand::Rebuild => Some(SkeleAction::Status),
 				}
 			} else {
 				None

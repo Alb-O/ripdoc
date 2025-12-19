@@ -38,10 +38,10 @@ impl RenderSelection {
 		full_source: HashSet<Id>,
 	) -> Self {
 		for id in &matches {
-			context.insert(*id);
+			context.insert(id.clone());
 		}
 		for id in &full_source {
-			context.insert(*id);
+			context.insert(id.clone());
 		}
 		Self {
 			matches,
@@ -94,6 +94,8 @@ pub struct Renderer {
 	pub flat: bool,
 	/// Optional initial source file to suppress redundant headers.
 	pub initial_current_file: Option<std::path::PathBuf>,
+	/// Optional persistent visited set to avoid redundant item rendering across calls.
+	pub visited: Option<std::sync::Arc<std::sync::Mutex<HashSet<Id>>>>,
 }
 
 impl Default for Renderer {
@@ -120,6 +122,7 @@ impl Renderer {
 			source_root: None,
 			flat: false,
 			initial_current_file: None,
+			visited: None,
 		}
 	}
 
@@ -174,6 +177,12 @@ impl Renderer {
 	/// Set the initial current file to suppress redundant headers.
 	pub fn with_current_file(mut self, file: Option<std::path::PathBuf>) -> Self {
 		self.initial_current_file = file;
+		self
+	}
+
+	/// Set a persistent visited set.
+	pub fn with_visited(mut self, visited: std::sync::Arc<std::sync::Mutex<HashSet<Id>>>) -> Self {
+		self.visited = Some(visited);
 		self
 	}
 

@@ -11,18 +11,28 @@ use super::types::{
 use crate::render::{render_name, render_path, render_type, signatures as signature};
 
 /// Index of crate items prepared for search queries.
-#[derive(Debug, Default, Clone)]
-pub struct SearchIndex {
+#[derive(Debug, Clone)]
+pub struct SearchIndex<'a> {
+	crate_data: &'a Crate,
 	entries: Vec<SearchResult>,
 	id_to_entry: HashMap<Id, usize>,
 }
 
-impl SearchIndex {
+impl<'a> SearchIndex<'a> {
 	/// Construct a new index by traversing the provided crate.
-	pub fn build(crate_data: &Crate, include_private: bool, source_root: Option<&Path>) -> Self {
+	pub fn build(crate_data: &'a Crate, include_private: bool, source_root: Option<&Path>) -> Self {
 		let mut builder = IndexBuilder::new(crate_data, include_private, source_root);
 		builder.traverse();
-		builder.finish()
+		let entries = builder.finish_entries();
+		let mut id_to_entry = HashMap::with_capacity(entries.len());
+		for (idx, entry) in entries.iter().enumerate() {
+			id_to_entry.insert(entry.item_id, idx);
+		}
+		Self {
+			crate_data,
+			entries,
+			id_to_entry,
+		}
 	}
 
 	/// Retrieve the immutable list of indexed entries.
@@ -40,6 +50,11 @@ impl SearchIndex {
 		for entry in &mut self.entries {
 			entry.clear_match_info();
 		}
+	}
+
+	/// Return a reference to the underlying crate data.
+	pub fn crate_data(&self) -> &Crate {
+		self.crate_data
 	}
 
 	/// Execute a query against the index and return matching results.
@@ -272,16 +287,8 @@ impl<'a> IndexBuilder<'a> {
 		}
 	}
 
-	fn finish(self) -> SearchIndex {
-		let entries: Vec<SearchResult> = self.entries;
-		let mut id_to_entry = HashMap::with_capacity(entries.len());
-		for (idx, entry) in entries.iter().enumerate() {
-			id_to_entry.insert(entry.item_id, idx);
-		}
-		SearchIndex {
-			entries,
-			id_to_entry,
-		}
+	fn finish_entries(self) -> Vec<SearchResult> {
+		self.entries
 	}
 
 	fn visit_root(&mut self, item: &Item) {

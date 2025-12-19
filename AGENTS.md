@@ -14,4 +14,8 @@
 - Stateful skeleton builder: `ripdoc skelebuild add [target] [--full]`
   - Incrementally builds a custom "source map" (default `skeleton.md`)
   - Mix API outlines with full source code (`--full`) while preserving crate hierarchy
-  - CRUD ops: `add`, `remove`, `reset`, `status`
+  - CRUD ops: `add`, `remove`, `reset`, `status`, `rebuild`
+  - Items are deduplicated: re-exported items are only rendered at their first occurrence
+  - Shared visited set prevents redundant rendering across multiple targets in a build
+  - `reset` preserves output path and `--flat` setting; only clears entries
+  - **Shell quoting**: Use single quotes for `inject` content containing `()` or special chars

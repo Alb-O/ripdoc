@@ -102,7 +102,10 @@ impl SkeleState {
 		for entry in &self.entries {
 			match entry {
 				SkeleEntry::Target(t) => {
-					let resolved = resolve_target(&t.path, false)?;
+					let resolved = match resolve_target(&t.path, false) {
+						Ok(r) => r,
+						Err(_) => continue, // Skip unresolved targets during rebuild
+					};
 					for rt in resolved {
 						let pkg_root = rt.package_root().to_path_buf();
 						if !crates_data.contains_key(&pkg_root) {
@@ -141,6 +144,8 @@ impl SkeleState {
 
 		let mut final_output = String::new();
 		let mut last_file: Option<PathBuf> = None;
+		let global_visited =
+			std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
 
 		for group in grouped_entries {
 			match group {
@@ -230,7 +235,8 @@ impl SkeleState {
 						.with_selection(selection)
 						.with_source_root(pkg_root.clone())
 						.with_flat(self.flat)
-						.with_current_file(last_file.clone());
+						.with_current_file(last_file.clone())
+						.with_visited(global_visited.clone());
 
 					let (rendered, final_file) = renderer.render_ext(crate_data)?;
 					last_file = final_file;
@@ -326,15 +332,19 @@ pub fn run_skelebuild(
 		Some(SkeleAction::Inject { content, after }) => {
 			let injection = SkeleEntry::Injection(SkeleInjection { content });
 			if let Some(after_path) = after {
-				if let Some(pos) = state.entries.iter().position(|e| match e {
+				let after_path_upper = after_path.to_uppercase();
+				if after_path_upper == "START" || after_path_upper == "TOP" || after_path_upper == "BEGIN" {
+					state.entries.insert(0, injection);
+					println!("Injected commentary at the start.");
+				} else if let Some(pos) = state.entries.iter().position(|e| match e {
 					SkeleEntry::Target(t) => t.path == after_path,
-					_ => false,
+					SkeleEntry::Injection(i) => i.content == after_path,
 				}) {
 					state.entries.insert(pos + 1, injection);
 					println!("Injected commentary after {}", after_path);
 				} else {
 					state.entries.push(injection);
-					println!("Target {} not found; injected at end.", after_path);
+					println!("Target '{}' not found; injected at end.", after_path);
 				}
 			} else {
 				state.entries.push(injection);
@@ -349,12 +359,13 @@ pub fn run_skelebuild(
 			println!("Removed entry: {}", target_str);
 		}
 		Some(SkeleAction::Reset) => {
+			// Preserve output path and flat setting from previous state unless overridden
+			let prev_output = state.output_path.clone();
+			let prev_flat = state.flat;
 			state = SkeleState::default();
-			if let Some(ref out) = output {
-				state.output_path = Some(out.clone());
-			}
-			state.flat = flat;
-			println!("State reset.");
+			state.output_path = output.clone().or(prev_output);
+			state.flat = flat || prev_flat;
+			println!("State reset (entries cleared, output/flat preserved).");
 		}
 		Some(SkeleAction::Status) | None => {
 			// Just showing status or falling through to rebuild

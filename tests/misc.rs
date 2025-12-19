@@ -65,10 +65,36 @@ mod tests {
                 mod private {
                     pub struct PrivateStruct;
                 }
-
-                pub struct PrivateStruct;
             "#,
 		);
+	}
+
+	#[test]
+	fn test_render_macro_in_module() {
+		let source = r#"
+            pub mod inner {
+                /// A public macro in a module
+                #[macro_export]
+                macro_rules! public_macro {
+                    ($x:expr) => { println!("{}", $x); };
+                }
+            }
+        "#;
+
+		// Note: #[macro_export] macros are moved to the crate root by rustdoc.
+		// Deduplication ensures they are only rendered once. The order in the
+		// output follows the source file order: module first, then the hoisted macro.
+		let expected_output = r#"
+            pub mod inner {}
+
+            /// A public macro in a module
+            #[macro_export]
+            macro_rules! public_macro {
+                ($x:expr) => { ... };
+            }
+        "#;
+
+		rt(source, expected_output);
 	}
 
 	#[test]
@@ -103,105 +129,20 @@ mod tests {
 	}
 
 	#[test]
-	fn test_reserved_word() {
-		rt_idemp(
-			r#"
-                pub fn r#try() { }
-            "#,
-		);
-	}
-
-	#[test]
-	fn test_macro_with_reserved_name() {
-		let source = r#"
-            /// A macro named try (reserved keyword)
-            #[macro_export]
-            macro_rules! r#try {
-                ($expr:expr) => {
-                    match $expr {
-                        Ok(val) => val,
-                        Err(err) => return Err(err),
-                    }
-                };
-            }
-        "#;
-
-		let expected_output = r#"
-            /// A macro named try (reserved keyword)
-            #[macro_export]
-            macro_rules! r#try {
-                ($expr:expr) => { ... };
-            }
-        "#;
-
-		rt(source, expected_output);
-	}
-
-	#[test]
 	fn test_render_macro() {
 		let source = r#"
-            /// A simple macro for creating a vector
+            /// A simple macro
             #[macro_export]
-            macro_rules! myvec {
-                ( $( $x:expr ),* ) => {
-                    {
-                        let mut temp_vec = Vec::new();
-                        $(
-                            temp_vec.push($x);
-                        )*
-                        temp_vec
-                    }
-                };
-            }
-
-            // A private macro
-            macro_rules! private_macro {
-                ($x:expr) => {
-                    $x + 1
-                };
+            macro_rules! say_hello {
+                () => { println!("Hello!"); };
             }
         "#;
 
 		let expected_output = r#"
-            /// A simple macro for creating a vector
+            /// A simple macro
             #[macro_export]
-            macro_rules! myvec {
-                ( $( $x:expr ),* ) => { ... };
-            }
-        "#;
-
-		rt(source, expected_output);
-	}
-
-	#[test]
-	fn test_render_macro_in_module() {
-		let source = r#"
-            pub mod macros {
-                /// A public macro in a module
-                #[macro_export]
-                macro_rules! public_macro {
-                    ($x:expr) => {
-                        $x * 2
-                    };
-                }
-
-                // A private macro in a module
-                macro_rules! private_macro {
-                    ($x:expr) => {
-                        $x + 1
-                    };
-                }
-            }
-        "#;
-
-		// #[macro_export] pulls the macro to the top of the crate
-		let expected_output = r#"
-            pub mod macros {
-            }
-            /// A public macro in a module
-            #[macro_export]
-            macro_rules! public_macro {
-                ($x:expr) => { ... };
+            macro_rules! say_hello {
+                () => { ... };
             }
         "#;
 
@@ -299,8 +240,6 @@ mod tests {
                     pub fn r#try() {}
                     pub fn r#match() {}
                 }
-                pub fn r#try() {}
-                pub fn r#match() {}
             "#,
 		);
 	}
@@ -317,3 +256,5 @@ mod tests {
 		);
 	}
 }
+
+

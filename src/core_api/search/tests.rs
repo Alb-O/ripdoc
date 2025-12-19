@@ -259,14 +259,14 @@ fn fixture_crate() -> Crate {
 	}
 }
 
-fn build_index() -> SearchIndex {
-	let crate_data = fixture_crate();
-	SearchIndex::build(&crate_data, false, None)
+fn build_index<'a>(crate_data: &'a Crate) -> SearchIndex<'a> {
+	SearchIndex::build(crate_data, false, None)
 }
 
 #[test]
 fn name_domain_matches_impl_method() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("render");
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
@@ -280,7 +280,8 @@ fn name_domain_matches_impl_method() {
 
 #[test]
 fn multi_domain_hits_report_all_matches() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("Widget");
 	options.domains = SearchDomain::NAMES | SearchDomain::DOCS;
 	let results = index.search(&options);
@@ -303,7 +304,8 @@ fn default_domains_exclude_paths() {
 
 #[test]
 fn path_domain_matches_impl_member() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("fixture::Widget::render");
 	options.domains = SearchDomain::PATHS;
 	let results = index.search(&options);
@@ -312,7 +314,8 @@ fn path_domain_matches_impl_member() {
 
 #[test]
 fn signature_domain_matches_free_function() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("fn helper");
 	options.domains = SearchDomain::SIGNATURES;
 	let results = index.search(&options);
@@ -321,7 +324,8 @@ fn signature_domain_matches_free_function() {
 
 #[test]
 fn case_sensitive_toggle_affects_results() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("widget docs");
 	options.domains = SearchDomain::DOCS;
 	options.case_sensitive = true;
@@ -332,7 +336,8 @@ fn case_sensitive_toggle_affects_results() {
 
 #[test]
 fn negative_query_returns_empty() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let options = SearchOptions::new("missing");
 	assert!(index.search(&options).is_empty());
 }
@@ -367,7 +372,8 @@ fn test_regex_pattern_directly() {
 
 #[test]
 fn or_search_matches_multiple_names() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("Widget|helper");
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
@@ -386,7 +392,8 @@ fn or_search_matches_multiple_names() {
 
 #[test]
 fn or_search_matches_multiple_docs() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("highlight|colors");
 	options.domains = SearchDomain::DOCS;
 	let results = index.search(&options);
@@ -398,7 +405,8 @@ fn or_search_matches_multiple_docs() {
 
 #[test]
 fn or_search_with_three_terms() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("render|paint|helper");
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
@@ -411,7 +419,8 @@ fn or_search_with_three_terms() {
 
 #[test]
 fn or_search_case_insensitive() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("widget|HELPER");
 	options.domains = SearchDomain::NAMES;
 	options.case_sensitive = false;
@@ -424,7 +433,8 @@ fn or_search_case_insensitive() {
 
 #[test]
 fn or_search_case_sensitive() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("Widget|HELPER");
 	options.domains = SearchDomain::NAMES;
 	options.case_sensitive = true;
@@ -438,7 +448,8 @@ fn or_search_case_sensitive() {
 
 #[test]
 fn or_search_in_signatures() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("fn helper|fn render");
 	options.domains = SearchDomain::SIGNATURES;
 	let results = index.search(&options);
@@ -450,7 +461,8 @@ fn or_search_in_signatures() {
 
 #[test]
 fn or_search_no_matches() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("nonexistent|alsonothere");
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
@@ -460,7 +472,8 @@ fn or_search_no_matches() {
 
 #[test]
 fn or_search_partial_match() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("Widget|nonexistent");
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
@@ -472,7 +485,8 @@ fn or_search_partial_match() {
 
 #[test]
 fn simple_search_still_works() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	let mut options = SearchOptions::new("Widget");
 	options.domains = SearchDomain::NAMES;
 	let results = index.search(&options);
@@ -483,7 +497,8 @@ fn simple_search_still_works() {
 
 #[test]
 fn or_search_with_special_chars_escaped() {
-	let index = build_index();
+	let crate_data = fixture_crate();
+	let index = build_index(&crate_data);
 	// Test that regex special chars are escaped (except pipe)
 	let mut options = SearchOptions::new("Widget|helper.");
 	options.domains = SearchDomain::NAMES;

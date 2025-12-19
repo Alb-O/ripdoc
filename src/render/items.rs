@@ -153,17 +153,22 @@ pub fn render_item(
 	item: &Item,
 	force_private: bool,
 ) -> String {
-	if state.selection_is_full_source(&item.id) {
-		if let Some(span) = &item.span {
-			if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
-				return format!("{source}\n\n");
-			}
-		}
+	// Early visibility check to avoid rendering children of non-visible containers.
+	// This prevents items from being marked as visited when they're rendered inside
+	// a private module that will ultimately be discarded.
+	if !force_private && !is_visible(state, item) {
+		return String::new();
 	}
 
-	if matches!(item.inner, ItemEnum::Module(_)) && !state.visited.insert(item.id) {
-
+	if !matches!(item.inner, ItemEnum::Module(_) | ItemEnum::Impl(_)) && state.visited.contains(&item.id) {
 		return String::new();
+	}
+
+	if matches!(item.inner, ItemEnum::Module(_)) {
+		let is_new = state.visited.insert(item.id.clone());
+		if !is_new {
+			return String::new();
+		}
 	}
 
 	if !state.selection_context_contains(&item.id) {
@@ -172,6 +177,17 @@ pub fn render_item(
 
 	if state.should_filter(path_prefix, item) {
 		return String::new();
+	}
+
+	if state.selection_is_full_source(&item.id) {
+		if let Some(span) = &item.span {
+			if let Ok(source) =
+				super::utils::extract_source(span, state.config.source_root.as_deref())
+			{
+				state.visited.insert(item.id.clone());
+				return format!("{source}\n\n");
+			}
+		}
 	}
 
 	let mut output = match &item.inner {
@@ -188,6 +204,9 @@ pub fn render_item(
 		_ => String::new(),
 	};
 
+	if !output.is_empty() {
+		state.visited.insert(item.id.clone());
+	}
 
 	if !output.is_empty()
 		&& state.config.render_source_labels
@@ -201,11 +220,7 @@ pub fn render_item(
 		output = format!("{}{}", label, output);
 	}
 
-	if !force_private && !is_visible(state, item) {
-		String::new()
-	} else {
-		output
-	}
+	output
 }
 
 /// Render a module and its children.

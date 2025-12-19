@@ -58,20 +58,52 @@ pub struct RenderState<'a, 'b> {
 	/// Tracks whether items were skipped (used for gap markers in search mode).
 	pub gap_state: GapState,
 	/// Tracks items already rendered to prevent infinite recursion/redundancy.
-	pub visited: HashSet<Id>,
+	pub visited: VisitedSet,
 	/// Tracks the current source file being rendered to detect transitions.
 	pub current_file: Option<std::path::PathBuf>,
+}
+
+/// Tracks items already rendered to prevent infinite recursion or redundancy across multiple
+/// render calls in a stateful build.
+#[derive(Debug, Clone)]
+pub enum VisitedSet {
+	/// Visited items are tracked locally within this instance.
+	Owned(HashSet<Id>),
+	/// Visited items are shared across multiple renderer instances.
+	Shared(std::sync::Arc<std::sync::Mutex<HashSet<Id>>>),
+}
+
+impl VisitedSet {
+	/// Record that an item has been visited, returning true if it was newly added.
+	pub fn insert(&mut self, id: Id) -> bool {
+		match self {
+			Self::Owned(set) => set.insert(id),
+			Self::Shared(shared) => shared.lock().unwrap().insert(id),
+		}
+	}
+
+	/// Check whether an item has already been visited.
+	pub fn contains(&self, id: &Id) -> bool {
+		match self {
+			Self::Owned(set) => set.contains(id),
+			Self::Shared(shared) => shared.lock().unwrap().contains(id),
+		}
+	}
 }
 
 impl<'a, 'b> RenderState<'a, 'b> {
 	/// Create a new render state.
 	pub fn new(config: &'a Renderer, crate_data: &'b Crate) -> Self {
+		let visited = match &config.visited {
+			Some(shared) => VisitedSet::Shared(shared.clone()),
+			None => VisitedSet::Owned(HashSet::new()),
+		};
 		Self {
 			config,
 			crate_data,
 			filter_matched: false,
 			gap_state: GapState::Clear,
-			visited: HashSet::new(),
+			visited,
 			current_file: config.initial_current_file.clone(),
 		}
 	}
