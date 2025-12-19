@@ -418,7 +418,9 @@ pub fn render_struct_field(
 
 	if state.selection_is_full_source(field_id) && let Some(span) = &field_item.span {
 		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
-			return format!("{source},\n");
+			let trimmed = source.trim();
+			let suffix = if trimmed.ends_with(',') { "\n" } else { ",\n" };
+			return format!("{source}{suffix}");
 		}
 	}
 

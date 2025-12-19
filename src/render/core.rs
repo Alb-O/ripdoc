@@ -92,6 +92,8 @@ pub struct Renderer {
 	pub source_root: Option<std::path::PathBuf>,
 	/// Whether to flatten the output (skip module nesting).
 	pub flat: bool,
+	/// Optional initial source file to suppress redundant headers.
+	pub initial_current_file: Option<std::path::PathBuf>,
 }
 
 impl Default for Renderer {
@@ -101,11 +103,12 @@ impl Default for Renderer {
 }
 
 impl Renderer {
-	/// Create a renderer with default configuration.
+	/// Create a new renderer with default configuration.
 	pub fn new() -> Self {
 		let config = Config::new_str()
 			.option("brace_style", "PreferSameLine")
-			.option("hard_tabs", "true");
+			.option("hard_tabs", "true")
+			.option("edition", "2021");
 		Self {
 			formatter: RustFmt::from_config(config),
 			format: RenderFormat::Markdown,
@@ -116,6 +119,7 @@ impl Renderer {
 			selection: None,
 			source_root: None,
 			flat: false,
+			initial_current_file: None,
 		}
 	}
 
@@ -167,16 +171,32 @@ impl Renderer {
 		self
 	}
 
+	/// Set the initial current file to suppress redundant headers.
+	pub fn with_current_file(mut self, file: Option<std::path::PathBuf>) -> Self {
+		self.initial_current_file = file;
+		self
+	}
+
 	/// Render a crate into formatted Rust source text.
 	pub fn render(&self, crate_data: &Crate) -> Result<String> {
+		Ok(self.render_ext(crate_data)?.0)
+	}
+
+	/// Render a crate into formatted Rust source text, returning both output and final current file.
+	pub fn render_ext(
+		&self,
+		crate_data: &Crate,
+	) -> Result<(String, Option<std::path::PathBuf>)> {
 		use super::state::RenderState;
 
 		let mut state = RenderState::new(self, crate_data);
 		let raw_output = state.render()?;
-		match self.format {
-			RenderFormat::Rust => self.render_rust(&raw_output),
-			RenderFormat::Markdown => self.render_markdown(raw_output),
-		}
+		let final_file = state.current_file.clone();
+		let output = match self.format {
+			RenderFormat::Rust => self.render_rust(&raw_output)?,
+			RenderFormat::Markdown => self.render_markdown(raw_output)?,
+		};
+		Ok((output, final_file))
 	}
 
 	fn render_rust(&self, raw_output: &str) -> Result<String> {

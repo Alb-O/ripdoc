@@ -154,9 +154,6 @@ struct SkelebuildArgs {
 	#[command(subcommand)]
 	command: Option<SkelebuildSubcommand>,
 
-	/// Target to add (shorthand for 'add').
-	target: Option<String>,
-
 	/// Output file for the skeleton.
 	#[arg(short = 'O', long)]
 	output: Option<std::path::PathBuf>,
@@ -742,11 +739,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 					}
 					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
 				}
-			} else if let Some(target) = args.target {
-				Some(SkeleAction::Add {
-					target,
-					full: false,
-				})
 			} else {
 				None
 			};

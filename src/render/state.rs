@@ -72,7 +72,7 @@ impl<'a, 'b> RenderState<'a, 'b> {
 			filter_matched: false,
 			gap_state: GapState::Clear,
 			visited: HashSet::new(),
-			current_file: None,
+			current_file: config.initial_current_file.clone(),
 		}
 	}
 

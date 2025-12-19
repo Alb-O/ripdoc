@@ -93,36 +93,70 @@ impl SkeleState {
 			return Ok(());
 		}
 
-		// Identify all targets and group them by crate for rendering.
+		// Pre-load all crates to avoid redundant I/O
 		let mut crates_data = HashMap::new();
 		use crate::cargo_utils::resolve_target;
 
-		// Construct final output by iterating through entries in order.
-		let mut final_output = String::new();
-
+		// Group sequential targets of the same crate to avoid redundant headers and chopy output.
+		let mut grouped_entries: Vec<SkeleGroup> = Vec::new();
 		for entry in &self.entries {
 			match entry {
 				SkeleEntry::Target(t) => {
 					let resolved = resolve_target(&t.path, false)?;
 					for rt in resolved {
 						let pkg_root = rt.package_root().to_path_buf();
-						let crate_data = if let Some(data) = crates_data.get(&pkg_root) {
-							data
-						} else {
+						if !crates_data.contains_key(&pkg_root) {
 							let data = rt.read_crate(
-								false, false, vec![], true, true,
+								false,
+								false,
+								vec![],
+								true,
+								true,
 								&crate::cargo_utils::CacheConfig::default(),
 							)?;
 							crates_data.insert(pkg_root.clone(), data);
-							crates_data.get(&pkg_root).unwrap()
-						};
+						}
 
-						let index = SearchIndex::build(crate_data, true, Some(rt.package_root()));
+						if let Some(SkeleGroup::Targets {
+							pkg_root: last_root,
+							targets,
+						}) = grouped_entries.last_mut()
+						{
+							if *last_root == pkg_root {
+								targets.push(t.clone());
+								continue;
+							}
+						}
+						grouped_entries.push(SkeleGroup::Targets {
+							pkg_root: pkg_root.clone(),
+							targets: vec![t.clone()],
+						});
+					}
+				}
+				SkeleEntry::Injection(i) => {
+					grouped_entries.push(SkeleGroup::Injection(i.content.clone()));
+				}
+			}
+		}
+
+		let mut final_output = String::new();
+		let mut last_file: Option<PathBuf> = None;
+
+		for group in grouped_entries {
+			match group {
+				SkeleGroup::Targets { pkg_root, targets } => {
+					let crate_data = crates_data.get(&pkg_root).unwrap();
+					let index = SearchIndex::build(crate_data, true, Some(&pkg_root));
+
+					let mut all_results = Vec::new();
+					let mut full_source_ids = std::collections::HashSet::new();
+
+					for t in &targets {
 						let mut options = SearchOptions::new(&t.path);
 						options.include_private = true;
 						options.domains = SearchDomain::PATHS;
 						let results = index.search(&options);
-						
+
 						let final_results = if results.is_empty() {
 							if let Ok(parsed) = crate::cargo_utils::target::Target::parse(&t.path) {
 								let query = parsed.path.join("::");
@@ -132,55 +166,70 @@ impl SkeleState {
 									fallback_options.domains = SearchDomain::PATHS;
 									fallback_options.case_sensitive = true;
 									index.search(&fallback_options)
-								} else { Vec::new() }
-							} else { Vec::new() }
-						} else { results };
+								} else {
+									Vec::new()
+								}
+							} else {
+								Vec::new()
+							}
+						} else {
+							results
+						};
 
-						if final_results.is_empty() { continue; }
-
-						let mut full_source_ids = std::collections::HashSet::new();
-						if t.full {
-							for res in &final_results {
-								if res.kind == crate::core_api::SearchItemKind::Crate { continue; }
+						for res in &final_results {
+							if t.full && res.kind != crate::core_api::SearchItemKind::Crate {
 								full_source_ids.insert(res.item_id);
 								if let Some(item) = crate_data.index.get(&res.item_id) {
 									match &item.inner {
-										rustdoc_types::ItemEnum::Struct(s) => { full_source_ids.extend(s.impls.iter().copied()); }
-										rustdoc_types::ItemEnum::Enum(e) => { full_source_ids.extend(e.impls.iter().copied()); }
-										rustdoc_types::ItemEnum::Trait(tr) => { full_source_ids.extend(tr.items.iter().copied()); }
+										rustdoc_types::ItemEnum::Struct(s) => {
+											full_source_ids.extend(s.impls.iter().copied());
+										}
+										rustdoc_types::ItemEnum::Enum(e) => {
+											full_source_ids.extend(e.impls.iter().copied());
+										}
+										rustdoc_types::ItemEnum::Trait(tr) => {
+											full_source_ids.extend(tr.items.iter().copied());
+										}
 										_ => {}
 									}
 								}
 							}
-						}
-
-						// We always want ancestors in the context so the renderer can reach the items.
-						// with_flat(true) will skip rendering the module wrappers.
-						let selection = build_render_selection(&index, &final_results, !self.flat, full_source_ids);
-
-						let renderer = Renderer::default()
-							.with_format(ripdoc.render_format())
-							.with_private_items(true)
-							.with_source_labels(ripdoc.render_source_labels())
-							.with_selection(selection)
-							.with_source_root(rt.package_root().to_path_buf())
-							.with_flat(self.flat);
-
-						let rendered = renderer.render(crate_data)?;
-						if !rendered.trim().is_empty() {
-							if !final_output.is_empty() {
-								final_output.push_str("\n\n---\n\n");
-							}
-							final_output.push_str(&rendered);
+							all_results.push(res.clone());
 						}
 					}
+
+					if all_results.is_empty() {
+						continue;
+					}
+
+					let selection =
+						build_render_selection(&index, &all_results, !self.flat, full_source_ids);
+					let renderer = Renderer::default()
+						.with_format(ripdoc.render_format())
+						.with_private_items(true)
+						.with_source_labels(ripdoc.render_source_labels())
+						.with_selection(selection)
+						.with_source_root(pkg_root.clone())
+						.with_flat(self.flat)
+						.with_current_file(last_file.clone());
+
+					let (rendered, final_file) = renderer.render_ext(crate_data)?;
+					last_file = final_file;
+
+					if !rendered.trim().is_empty() {
+						if !final_output.is_empty() {
+							final_output.push_str("\n\n---\n\n");
+						}
+						final_output.push_str(&rendered);
+					}
 				}
-				SkeleEntry::Injection(i) => {
+				SkeleGroup::Injection(content) => {
 					if !final_output.is_empty() {
 						final_output.push_str("\n\n");
 					}
-					final_output.push_str(&i.content);
+					final_output.push_str(&content);
 					final_output.push('\n');
+					// We don't reset last_file here because manual comments don't change the source file context
 				}
 			}
 		}
@@ -188,6 +237,14 @@ impl SkeleState {
 		fs::write(&output_path, final_output)?;
 		Ok(())
 	}
+}
+
+enum SkeleGroup {
+	Targets {
+		pkg_root: PathBuf,
+		targets: Vec<SkeleTarget>,
+	},
+	Injection(String),
 }
 
 /// Action to perform on the skelebuild state.
