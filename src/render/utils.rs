@@ -116,13 +116,35 @@ pub fn extract_source(
 	source_root: Option<&std::path::Path>,
 ) -> std::io::Result<String> {
 	let mut path = span.filename.clone();
-	if let Some(root) = source_root
-		&& path.is_relative()
-	{
-		path = root.join(path);
+
+	// Heuristic for finding the file, especially in workspaces
+	if !path.exists() {
+		if let Some(root) = source_root {
+			let joined = root.join(&span.filename);
+			if joined.exists() {
+				path = joined;
+			} else if span.filename.is_relative() {
+				// Try stripping leading components if it might be relative to a workspace root
+				// but we are in a package root.
+				let mut components = span.filename.components();
+				while components.next().is_some() {
+					let candidate = root.join(components.as_path());
+					if candidate.exists() {
+						path = candidate;
+						break;
+					}
+				}
+			}
+		}
 	}
 
-	let file_content = std::fs::read_to_string(&path)?;
+	let file_content = match std::fs::read_to_string(&path) {
+		Ok(content) => content,
+		Err(e) => {
+			eprintln!("Warning: Failed to read source file {}: {}", path.display(), e);
+			return Err(e);
+		}
+	};
 	let lines: Vec<&str> = file_content.lines().collect();
 
 

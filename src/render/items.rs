@@ -209,41 +209,57 @@ pub fn render_item(
 /// Render a module and its children.
 pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) -> String {
 	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+		if let Ok(source) =
+			super::utils::extract_source(span, state.config.source_root.as_deref())
+		{
 			return format!("{source}\n\n");
 		}
 	}
 
 	let path_prefix = ppush(path_prefix, &render_name(item));
-	let mut output = format!("{}mod {} {{\n", render_vis(item), render_name(item));
-	// Add module doc comment if present
-	if state.should_module_doc(&path_prefix, item)
-		&& let Some(docs) = &item.docs
-	{
-		for line in docs.lines() {
-			output.push_str(&format!("    //! {line}\n"));
+
+	let is_flat = state.config.flat;
+	let mut output = if is_flat {
+		String::new()
+	} else {
+		let mut head = format!("{}mod {} {{\n", render_vis(item), render_name(item));
+		// Add module doc comment if present
+		if state.should_module_doc(&path_prefix, item) && let Some(docs) = &item.docs {
+			for line in docs.lines() {
+				head.push_str(&format!("    //! {line}\n"));
+			}
+			head.push('\n');
 		}
-		output.push('\n');
-	}
+		head
+	};
 
 	let module = extract_item!(item, ItemEnum::Module);
-	let gaps = GapController::new("");
+	let gaps = GapController::new(if is_flat { "" } else { "    " });
 	gaps.begin_section(state);
 
 	for item_id in &module.items {
-		let child_item = must_get(state.crate_data, item_id);
+		if !state.selection_allows_child(&item.id, item_id) {
+			state.mark_skipped();
+			continue;
+		}
 
-		let rendered = render_item(state, &path_prefix, child_item, false);
-		if !rendered.is_empty() {
-			gaps.emit_if_needed(state, &mut output, &rendered);
-			output.push_str(&rendered);
+		if let Some(inner_item) = state.crate_data.index.get(item_id) {
+			let rendered = render_item(state, &path_prefix, inner_item, false);
+			if !rendered.is_empty() {
+				gaps.emit_if_needed(state, &mut output, &rendered);
+				output.push_str(&rendered);
+			} else {
+				state.mark_skipped();
+			}
 		} else {
-			// Item was filtered out, mark it as skipped
 			state.mark_skipped();
 		}
 	}
 
-	output.push_str("}\n\n");
+	if !is_flat {
+		output.push_str("}\n\n");
+	}
+
 	output
 }
 

@@ -90,6 +90,8 @@ pub struct Renderer {
 	pub selection: Option<RenderSelection>,
 	/// Optional root path for resolving relative source files.
 	pub source_root: Option<std::path::PathBuf>,
+	/// Whether to flatten the output (skip module nesting).
+	pub flat: bool,
 }
 
 impl Default for Renderer {
@@ -113,6 +115,7 @@ impl Renderer {
 			filter: String::new(),
 			selection: None,
 			source_root: None,
+			flat: false,
 		}
 	}
 
@@ -155,6 +158,12 @@ impl Renderer {
 	/// Set the source root for resolving relative paths.
 	pub fn with_source_root(mut self, root: std::path::PathBuf) -> Self {
 		self.source_root = Some(root);
+		self
+	}
+
+	/// Toggle flattening of the output.
+	pub fn with_flat(mut self, flat: bool) -> Self {
+		self.flat = flat;
 		self
 	}
 

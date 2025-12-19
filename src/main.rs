@@ -165,6 +165,10 @@ struct SkelebuildArgs {
 	#[arg(long)]
 	reset: bool,
 
+	/// Flatten the output (skip module nesting).
+	#[arg(long)]
+	flat: bool,
+
 	#[command(flatten)]
 	/// Common arguments for configuring Ripdoc.
 	common: CommonArgs,
@@ -180,14 +184,43 @@ enum SkelebuildSubcommand {
 		/// Include the full source code for this item.
 		#[arg(short = 'f', long, default_value_t = false)]
 		full: bool,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
+
+		/// Flatten the output.
+		#[arg(long)]
+		flat: bool,
+	},
+	/// Inject manual commentary.
+	Inject {
+		/// Text to inject.
+		content: String,
+
+		/// Inject after this target.
+		#[arg(long)]
+		after: Option<String>,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
 	},
 	/// Remove a target from the skeleton.
 	Remove {
 		/// Target to remove.
 		target: String,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
 	},
 	/// Clear all targets and reset state.
-	Reset,
+	Reset {
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
+	},
 	/// Show current targets and output path.
 	Status,
 }
@@ -664,13 +697,49 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			use ripdoc::skelebuild::SkeleAction;
 			let rs = build_ripdoc(&args.common);
 
+			let mut output = args.output;
+			let mut flat = args.flat;
+
 			let action = if args.reset {
 				Some(SkeleAction::Reset)
 			} else if let Some(cmd) = args.command {
 				match cmd {
-					SkelebuildSubcommand::Add { target, full } => Some(SkeleAction::Add { target, full }),
-					SkelebuildSubcommand::Remove { target } => Some(SkeleAction::Remove(target)),
-					SkelebuildSubcommand::Reset => Some(SkeleAction::Reset),
+					SkelebuildSubcommand::Add {
+						target,
+						full,
+						output: o,
+						flat: f,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						if f {
+							flat = f;
+						}
+						Some(SkeleAction::Add { target, full })
+					}
+					SkelebuildSubcommand::Inject {
+						content,
+						after,
+						output: o,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						Some(SkeleAction::Inject { content, after })
+					}
+					SkelebuildSubcommand::Remove { target, output: o } => {
+						if o.is_some() {
+							output = o;
+						}
+						Some(SkeleAction::Remove(target))
+					}
+					SkelebuildSubcommand::Reset { output: o } => {
+						if o.is_some() {
+							output = o;
+						}
+						Some(SkeleAction::Reset)
+					}
 					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
 				}
 			} else if let Some(target) = args.target {
@@ -682,9 +751,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				None
 			};
 
-			ripdoc::skelebuild::run_skelebuild(action, args.output, &rs)?;
+			ripdoc::skelebuild::run_skelebuild(action, output, flat, &rs)?;
 			Ok(())
 		}
+
 	}
 }
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]
