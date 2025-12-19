@@ -1,4 +1,4 @@
-# PRODUCTIVITY: Skim any crate APIs/docs through simple cli
+# PRODUCTIVITY: Skim any crate APIs/docs through cli tool
 
 - Usage: `ripdoc <COMMAND> [TARGET] [OPTIONS]`
 - Basic skim from any directory: `ripdoc print [target]` → printed Markdown with top-level docs and code skeleton
@@ -10,3 +10,8 @@
 - Fetch README: `ripdoc readme [target]` → fetches and displays the README
 - Private/auto trait details: add `--private` and/or `--auto-impls`
 - Feature gating flags work the same as with cargo
+- Source tracing: Injects `### Source: path/to/file.rs` labels on file transitions (disable with `--no-source-labels`)
+- Stateful skeleton builder: `ripdoc skelebuild add [target] [--full]`
+  - Incrementally builds a custom "source map" (default `skeleton.md`)
+  - Mix API outlines with full source code (`--full`) while preserving crate hierarchy
+  - CRUD ops: `add`, `remove`, `reset`, `status`
