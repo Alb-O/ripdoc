@@ -133,7 +133,11 @@ impl TargetResolution {
 
 impl ResolvedTarget {
 	/// Build a `ResolvedTarget` with a normalised module filter path.
-	pub(super) fn new(path: CargoPath, components: &[String], package_name: Option<String>) -> Self {
+	pub(super) fn new(
+		path: CargoPath,
+		components: &[String],
+		package_name: Option<String>,
+	) -> Self {
 		let filter = if components.is_empty() {
 			String::new()
 		} else {
@@ -280,7 +284,7 @@ pub fn resolve_target(target_str: &str, offline: bool) -> Result<Vec<ResolvedTar
 		Entrypoint::Path(_) => ResolvedTarget::from_target(target, offline),
 		Entrypoint::Name { name, version } => {
 			let resolved_list = ResolvedTarget::resolve_named_target(
-				&name,
+				name,
 				version.as_ref(),
 				&target.path,
 				offline,

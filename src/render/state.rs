@@ -59,6 +59,8 @@ pub struct RenderState<'a, 'b> {
 	pub gap_state: GapState,
 	/// Tracks items already rendered to prevent infinite recursion/redundancy.
 	pub visited: HashSet<Id>,
+	/// Tracks the current source file being rendered to detect transitions.
+	pub current_file: Option<std::path::PathBuf>,
 }
 
 impl<'a, 'b> RenderState<'a, 'b> {
@@ -70,6 +72,7 @@ impl<'a, 'b> RenderState<'a, 'b> {
 			filter_matched: false,
 			gap_state: GapState::Clear,
 			visited: HashSet::new(),
+			current_file: None,
 		}
 	}
 

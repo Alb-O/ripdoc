@@ -18,11 +18,19 @@ fn rust_to_markdown(source: &str) -> String {
 	while let Some(line) = lines.next() {
 		let trimmed = line.trim_start();
 
+		if let Some(filename) = trimmed.strip_prefix("// ripdoc:source: ") {
+			flush_code_block(&mut markdown, &mut code_buffer, &mut need_gap_before_code);
+			in_code_block = false;
+			markdown.push_str(&format!("### Source: {}\n\n", filename));
+			continue;
+		}
+
 		if is_doc_comment(trimmed) {
 			let doc_block = collect_doc_block(line, &mut lines);
 			let is_outer_doc = trimmed.starts_with("///");
 			let next_line = lines.peek().copied();
-			let inline_doc = is_outer_doc && should_inline_doc_block(base_indent, next_line, &doc_block);
+			let inline_doc =
+				is_outer_doc && should_inline_doc_block(base_indent, next_line, &doc_block);
 
 			if inline_doc {
 				in_code_block = true;

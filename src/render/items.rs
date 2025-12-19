@@ -165,7 +165,7 @@ pub fn render_item(
 		return String::new();
 	}
 
-	let output = match &item.inner {
+	let mut output = match &item.inner {
 		ItemEnum::Module(_) => render_module(state, path_prefix, item),
 		ItemEnum::Struct(_) => render_struct(state, path_prefix, item),
 		ItemEnum::Enum(_) => render_enum(state, path_prefix, item),
@@ -178,6 +178,16 @@ pub fn render_item(
 		ItemEnum::ProcMacro(_) => render_proc_macro(item),
 		_ => String::new(),
 	};
+
+	if !output.is_empty()
+		&& state.config.render_source_labels
+		&& let Some(span) = &item.span
+		&& state.current_file.as_ref() != Some(&span.filename)
+	{
+		state.current_file = Some(span.filename.clone());
+		let label = format!("// ripdoc:source: {}\n\n", span.filename.display());
+		output = format!("{}{}", label, output);
+	}
 
 	if !force_private && !is_visible(state, item) {
 		String::new()

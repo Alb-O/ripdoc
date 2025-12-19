@@ -43,6 +43,9 @@ pub struct Ripdoc {
 	/// Output format to use when rendering crates.
 	render_format: RenderFormat,
 
+	/// Whether to inject source filename labels.
+	render_source_labels: bool,
+
 	/// Whether to suppress output during processing.
 	silent: bool,
 
@@ -104,6 +107,7 @@ impl Ripdoc {
 			auto_impls: false,
 			silent: false,
 			render_format: RenderFormat::Markdown,
+			render_source_labels: true,
 			cache_config: super::cargo_utils::CacheConfig::default(),
 		}
 	}
@@ -124,6 +128,12 @@ impl Ripdoc {
 	/// Selects the output format used when rendering crate documentation.
 	pub fn with_render_format(mut self, format: RenderFormat) -> Self {
 		self.render_format = format;
+		self
+	}
+
+	/// Enables or disables source filename labels.
+	pub fn with_source_labels(mut self, enabled: bool) -> Self {
+		self.render_source_labels = enabled;
 		self
 	}
 
@@ -148,6 +158,11 @@ impl Ripdoc {
 	/// Returns the currently configured render format.
 	pub fn render_format(&self) -> RenderFormat {
 		self.render_format
+	}
+
+	/// Returns whether source filename labels are enabled.
+	pub fn render_source_labels(&self) -> bool {
+		self.render_source_labels
 	}
 
 	/// Returns the parsed representation of the crate's API.
@@ -223,6 +238,7 @@ impl Ripdoc {
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)
 				.with_private_items(options.include_private)
+				.with_source_labels(self.render_source_labels)
 				.with_format(self.render_format)
 				.with_selection(selection);
 			let rendered = renderer.render(&crate_data)?;
@@ -323,6 +339,7 @@ impl Ripdoc {
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)
 				.with_private_items(private_items)
+				.with_source_labels(self.render_source_labels)
 				.with_format(self.render_format);
 
 			let mut rendered = renderer.render(&crate_data)?;
@@ -343,6 +360,7 @@ impl Ripdoc {
 					.with_filter(&rt.filter)
 					.with_auto_impls(self.auto_impls)
 					.with_private_items(true)
+					.with_source_labels(self.render_source_labels)
 					.with_format(RenderFormat::Rust);
 
 				rendered = renderer_private.render(&crate_data_private)?;

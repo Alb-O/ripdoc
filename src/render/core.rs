@@ -66,6 +66,8 @@ pub struct Renderer {
 	pub render_auto_impls: bool,
 	/// Whether private items should be rendered.
 	pub render_private_items: bool,
+	/// Whether to inject source filename labels in the output.
+	pub render_source_labels: bool,
 	/// Filter path relative to the crate root.
 	pub filter: String,
 	/// Optional selection restricting which items are rendered.
@@ -89,6 +91,7 @@ impl Renderer {
 			format: RenderFormat::Markdown,
 			render_auto_impls: false,
 			render_private_items: false,
+			render_source_labels: true,
 			filter: String::new(),
 			selection: None,
 		}
@@ -115,6 +118,12 @@ impl Renderer {
 	/// Render private items?
 	pub fn with_private_items(mut self, render_private_items: bool) -> Self {
 		self.render_private_items = render_private_items;
+		self
+	}
+
+	/// Inject source filename labels?
+	pub fn with_source_labels(mut self, render_source_labels: bool) -> Self {
+		self.render_source_labels = render_source_labels;
 		self
 	}
 

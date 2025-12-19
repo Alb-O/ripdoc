@@ -172,14 +172,14 @@ impl SearchIndex {
 				}
 			}
 
-			if opts.domains.contains(SearchDomain::DOCS) {
-				if let Some(docs) = &entry.docs {
-					let stripped_docs = strip_symbols_preserving_pipes(docs);
-					if let Some(ref stripped_re) = stripped_regex {
-						if stripped_re.is_match(&stripped_docs) {
-							matched |= SearchDomain::DOCS;
-						}
-					}
+			if opts.domains.contains(SearchDomain::DOCS)
+				&& let Some(docs) = &entry.docs
+			{
+				let stripped_docs = strip_symbols_preserving_pipes(docs);
+				if let Some(ref stripped_re) = stripped_regex
+					&& stripped_re.is_match(&stripped_docs)
+				{
+					matched |= SearchDomain::DOCS;
 				}
 			}
 
@@ -190,14 +190,14 @@ impl SearchIndex {
 				}
 			}
 
-			if opts.domains.contains(SearchDomain::SIGNATURES) {
-				if let Some(sig) = &entry.signature {
-					let stripped_sig = strip_symbols_preserving_pipes(sig);
-					if let Some(ref stripped_re) = stripped_regex {
-						if stripped_re.is_match(&stripped_sig) {
-							matched |= SearchDomain::SIGNATURES;
-						}
-					}
+			if opts.domains.contains(SearchDomain::SIGNATURES)
+				&& let Some(sig) = &entry.signature
+			{
+				let stripped_sig = strip_symbols_preserving_pipes(sig);
+				if let Some(ref stripped_re) = stripped_regex
+					&& stripped_re.is_match(&stripped_sig)
+				{
+					matched |= SearchDomain::SIGNATURES;
 				}
 			}
 

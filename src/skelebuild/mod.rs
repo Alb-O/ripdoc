@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
+
+use crate::core_api::search::{SearchDomain, SearchIndex, SearchOptions, build_render_selection};
 use crate::core_api::{Result, Ripdoc};
-use crate::core_api::search::{SearchOptions, SearchDomain, SearchIndex, build_render_selection};
 use crate::render::Renderer;
 
 /// State of an ongoing skeleton build.
@@ -53,8 +55,11 @@ impl SkeleState {
 
 	/// Rebuilds the skeleton file from scratch using all stored targets.
 	pub fn rebuild(&self, ripdoc: &Ripdoc) -> Result<()> {
-		let output_path = self.output_path.clone().unwrap_or_else(|| PathBuf::from("skeleton.md"));
-		
+		let output_path = self
+			.output_path
+			.clone()
+			.unwrap_or_else(|| PathBuf::from("skeleton.md"));
+
 		if self.targets.is_empty() {
 			fs::write(&output_path, "// No targets added to skeleton.\n")?;
 			return Ok(());
@@ -68,7 +73,9 @@ impl SkeleState {
 			let resolved = resolve_target(target_str, false)?;
 			for rt in resolved {
 				let key = rt.package_root().to_path_buf();
-				let entry = crate_selections.entry(key).or_insert_with(|| (rt, Vec::new()));
+				let entry = crate_selections
+					.entry(key)
+					.or_insert_with(|| (rt, Vec::new()));
 				entry.1.push(target_str.clone());
 			}
 		}
@@ -77,27 +84,27 @@ impl SkeleState {
 
 		for (rt, targets) in crate_selections.into_values() {
 			let crate_data = rt.read_crate(
-				false, // no_default_features
-				false, // all_features
+				false,  // no_default_features
+				false,  // all_features
 				vec![], // features
-				true, // private_items
-				true, // silent
+				true,   // private_items
+				true,   // silent
 				&crate::cargo_utils::CacheConfig::default(),
 			)?;
 
 			let index = SearchIndex::build(&crate_data, true, Some(rt.package_root()));
-			
+
 			let mut all_results = Vec::new();
 			for t in &targets {
 				let mut options = SearchOptions::new(t);
 				options.include_private = true;
 				options.domains = SearchDomain::PATHS;
-				
+
 				let results = index.search(&options);
-				
+
 				// If exact path match failed, try matching without the crate name prefix
 				if results.is_empty() {
-					if let Ok(parsed) = crate::cargo_utils::target::Target::parse(&t) {
+					if let Ok(parsed) = crate::cargo_utils::target::Target::parse(t) {
 						let query = parsed.path.join("::");
 						if !query.is_empty() {
 							let mut fallback_options = SearchOptions::new(&query);
@@ -120,20 +127,25 @@ impl SkeleState {
 			let renderer = Renderer::default()
 				.with_format(ripdoc.render_format())
 				.with_private_items(true)
+				.with_source_labels(ripdoc.render_source_labels())
 				.with_selection(selection);
-			
+
 			let mut rendered = renderer.render(&crate_data)?;
-			
+
 			if let Some(ref name) = rt.package_name {
-				rendered = format!("// Package: {}\n{}", name, rendered);
+				let header = match ripdoc.render_format() {
+					crate::RenderFormat::Markdown => format!("# Package: {name}\n\n"),
+					crate::RenderFormat::Rust => format!("// Package: {name}\n\n"),
+				};
+				rendered = format!("{header}{rendered}");
 			}
-			
+
 			rendered_crates.push(rendered);
 		}
 
 		let final_output = rendered_crates.join("\n\n// ---\n\n");
 		fs::write(&output_path, final_output)?;
-		
+
 		Ok(())
 	}
 }
@@ -188,7 +200,10 @@ pub fn run_skelebuild(
 	state.rebuild(ripdoc)?;
 	state.save()?;
 
-	let output_path = state.output_path.clone().unwrap_or_else(|| PathBuf::from("skeleton.md"));
+	let output_path = state
+		.output_path
+		.clone()
+		.unwrap_or_else(|| PathBuf::from("skeleton.md"));
 	println!("Skeleton state:");
 	println!("  Output: {}", output_path.display());
 	println!("  Targets: {:?}", state.targets);

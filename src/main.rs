@@ -67,6 +67,10 @@ struct CommonArgs {
 	/// Select the output format (`rust` or `markdown`)
 	#[arg(short = 'f', long, value_enum, default_value = "markdown")]
 	format: OutputFormat,
+
+	/// Do not inject source filename labels in the output
+	#[arg(long, default_value_t = false)]
+	no_source_labels: bool,
 }
 
 #[derive(Args, Clone)]
@@ -262,6 +266,7 @@ fn build_ripdoc(common: &CommonArgs) -> Ripdoc {
 		.with_auto_impls(common.auto_impls)
 		.with_render_format(common.format.into())
 		.with_silent(!common.verbose)
+		.with_source_labels(!common.no_source_labels)
 }
 
 /// Resolve the active search domains specified by the CLI flags.
@@ -654,7 +659,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 		Command::Skelebuild(args) => {
 			use ripdoc::skelebuild::SkeleAction;
 			let rs = build_ripdoc(&args.common);
-			
+
 			let action = if args.reset {
 				Some(SkeleAction::Reset)
 			} else if let Some(cmd) = args.command {
