@@ -25,18 +25,29 @@ pub struct RenderSelection {
 	context: HashSet<Id>,
 	/// Matched containers whose children should be fully expanded.
 	expanded: HashSet<Id>,
+	/// Item identifiers that should be rendered with their full source code.
+	full_source: HashSet<Id>,
 }
 
 impl RenderSelection {
 	/// Create a selection from explicit match and context sets.
-	pub fn new(matches: HashSet<Id>, mut context: HashSet<Id>, expanded: HashSet<Id>) -> Self {
+	pub fn new(
+		matches: HashSet<Id>,
+		mut context: HashSet<Id>,
+		expanded: HashSet<Id>,
+		full_source: HashSet<Id>,
+	) -> Self {
 		for id in &matches {
+			context.insert(*id);
+		}
+		for id in &full_source {
 			context.insert(*id);
 		}
 		Self {
 			matches,
 			context,
 			expanded,
+			full_source,
 		}
 	}
 
@@ -53,6 +64,11 @@ impl RenderSelection {
 	/// Containers that should expand to include all of their children.
 	pub fn expanded(&self) -> &HashSet<Id> {
 		&self.expanded
+	}
+
+	/// Identifiers for items that should be rendered with their full source code.
+	pub fn full_source(&self) -> &HashSet<Id> {
+		&self.full_source
 	}
 }
 
@@ -72,6 +88,8 @@ pub struct Renderer {
 	pub filter: String,
 	/// Optional selection restricting which items are rendered.
 	pub selection: Option<RenderSelection>,
+	/// Optional root path for resolving relative source files.
+	pub source_root: Option<std::path::PathBuf>,
 }
 
 impl Default for Renderer {
@@ -94,6 +112,7 @@ impl Renderer {
 			render_source_labels: true,
 			filter: String::new(),
 			selection: None,
+			source_root: None,
 		}
 	}
 
@@ -130,6 +149,12 @@ impl Renderer {
 	/// Restrict rendering to the provided selection.
 	pub fn with_selection(mut self, selection: RenderSelection) -> Self {
 		self.selection = Some(selection);
+		self
+	}
+
+	/// Set the source root for resolving relative paths.
+	pub fn with_source_root(mut self, root: std::path::PathBuf) -> Self {
+		self.source_root = Some(root);
 		self
 	}
 

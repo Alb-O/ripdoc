@@ -233,7 +233,12 @@ impl Ripdoc {
 				continue;
 			}
 
-			let selection = build_render_selection(&index, &results, options.expand_containers);
+			let selection = build_render_selection(
+				&index,
+				&results,
+				options.expand_containers,
+				std::collections::HashSet::new(),
+			);
 			let renderer = Renderer::default()
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)

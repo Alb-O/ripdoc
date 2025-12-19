@@ -134,7 +134,9 @@ pub fn render(renderer: &Renderer, source: &str, expected_output: &str, is_proc_
 /// Idempotent rendering test
 pub fn rt_idemp(source: &str) {
 	render(
-		&Renderer::default().with_format(ripdoc::RenderFormat::Rust),
+		&Renderer::default()
+			.with_format(ripdoc::RenderFormat::Rust)
+			.with_source_labels(false),
 		source,
 		source,
 		false,
@@ -146,7 +148,8 @@ pub fn rt_priv_idemp(source: &str) {
 	render(
 		&Renderer::default()
 			.with_format(ripdoc::RenderFormat::Rust)
-			.with_private_items(true),
+			.with_private_items(true)
+			.with_source_labels(false),
 		source,
 		source,
 		false,
@@ -156,7 +159,9 @@ pub fn rt_priv_idemp(source: &str) {
 /// Render roundtrip
 pub fn rt(source: &str, expected_output: &str) {
 	render(
-		&Renderer::default().with_format(ripdoc::RenderFormat::Rust),
+		&Renderer::default()
+			.with_format(ripdoc::RenderFormat::Rust)
+			.with_source_labels(false),
 		source,
 		expected_output,
 		false,
@@ -168,7 +173,8 @@ pub fn rt_private(source: &str, expected_output: &str) {
 	render(
 		&Renderer::default()
 			.with_format(ripdoc::RenderFormat::Rust)
-			.with_private_items(true),
+			.with_private_items(true)
+			.with_source_labels(false),
 		source,
 		expected_output,
 		false,
@@ -178,7 +184,9 @@ pub fn rt_private(source: &str, expected_output: &str) {
 /// Render roundtrip for procedural macro crates.
 pub fn rt_procmacro(source: &str, expected_output: &str) {
 	render(
-		&Renderer::default().with_format(ripdoc::RenderFormat::Rust),
+		&Renderer::default()
+			.with_format(ripdoc::RenderFormat::Rust)
+			.with_source_labels(false),
 		source,
 		expected_output,
 		true,
@@ -255,7 +263,8 @@ macro_rules! gen_tests {
             $(
                 #[test]
                 fn $rt_custom_name() {
-                    let custom_renderer = $rt_custom_renderer;
+                    let mut custom_renderer = $rt_custom_renderer;
+                    custom_renderer.render_source_labels = false;
                     render(&custom_renderer, $rt_custom_input, $rt_custom_output, false);
                 }
             )*

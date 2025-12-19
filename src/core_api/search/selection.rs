@@ -11,6 +11,7 @@ pub fn build_render_selection(
 	index: &SearchIndex,
 	results: &[SearchResult],
 	expand_containers: bool,
+	full_source: HashSet<Id>,
 ) -> RenderSelection {
 	let mut matches = HashSet::new();
 	let mut context = HashSet::new();
@@ -55,7 +56,7 @@ pub fn build_render_selection(
 		}
 	}
 
-	RenderSelection::new(matches, context, expanded)
+	RenderSelection::new(matches, context, expanded, full_source)
 }
 
 /// Format the set of matched domains into human-friendly labels.

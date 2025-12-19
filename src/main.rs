@@ -176,6 +176,10 @@ enum SkelebuildSubcommand {
 	Add {
 		/// Target to add.
 		target: String,
+
+		/// Include the full source code for this item.
+		#[arg(short = 'f', long, default_value_t = false)]
+		full: bool,
 	},
 	/// Remove a target from the skeleton.
 	Remove {
@@ -664,13 +668,16 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				Some(SkeleAction::Reset)
 			} else if let Some(cmd) = args.command {
 				match cmd {
-					SkelebuildSubcommand::Add { target } => Some(SkeleAction::Add(target)),
+					SkelebuildSubcommand::Add { target, full } => Some(SkeleAction::Add { target, full }),
 					SkelebuildSubcommand::Remove { target } => Some(SkeleAction::Remove(target)),
 					SkelebuildSubcommand::Reset => Some(SkeleAction::Reset),
 					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
 				}
 			} else if let Some(target) = args.target {
-				Some(SkeleAction::Add(target))
+				Some(SkeleAction::Add {
+					target,
+					full: false,
+				})
 			} else {
 				None
 			};

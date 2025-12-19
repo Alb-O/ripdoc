@@ -153,7 +153,16 @@ pub fn render_item(
 	item: &Item,
 	force_private: bool,
 ) -> String {
+	if state.selection_is_full_source(&item.id) {
+		if let Some(span) = &item.span {
+			if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+				return format!("{source}\n\n");
+			}
+		}
+	}
+
 	if matches!(item.inner, ItemEnum::Module(_)) && !state.visited.insert(item.id) {
+
 		return String::new();
 	}
 
@@ -174,10 +183,11 @@ pub fn render_item(
 		ItemEnum::Function(_) => render_function_item(state, item, false),
 		ItemEnum::Constant { .. } => render_constant_item(state, item),
 		ItemEnum::TypeAlias(_) => render_type_alias_item(state, item),
-		ItemEnum::Macro(_) => render_macro(item),
-		ItemEnum::ProcMacro(_) => render_proc_macro(item),
+		ItemEnum::Macro(_) => render_macro(state, item),
+		ItemEnum::ProcMacro(_) => render_proc_macro(state, item),
 		_ => String::new(),
 	};
+
 
 	if !output.is_empty()
 		&& state.config.render_source_labels
@@ -198,6 +208,12 @@ pub fn render_item(
 
 /// Render a module and its children.
 pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("{source}\n\n");
+		}
+	}
+
 	let path_prefix = ppush(path_prefix, &render_name(item));
 	let mut output = format!("{}mod {} {{\n", render_vis(item), render_name(item));
 	// Add module doc comment if present
@@ -233,40 +249,46 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 
 /// Render a struct declaration and its fields.
 pub fn render_struct(state: &mut RenderState, path_prefix: &str, item: &Item) -> String {
-	let docs = docs(item);
-
 	let struct_ = extract_item!(item, ItemEnum::Struct);
 
 	if !state.selection_context_contains(&item.id) {
 		return String::new();
 	}
 
-	let generics = render_generics(&struct_.generics);
-	let where_clause = render_where_clause(&struct_.generics);
+	let docs = docs(item);
 
-	// Collect inline traits first while we have immutable access
-	let inline_traits: Vec<String> = collect_inline_traits(state, &struct_.impls)
-		.into_iter()
-		.map(|s| s.to_string())
-		.collect();
+	let rendered_struct = if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		super::utils::extract_source(span, state.config.source_root.as_deref()).ok().map(|s| format!("{s}\n\n"))
+	} else {
+		let generics = render_generics(&struct_.generics);
+		let where_clause = render_where_clause(&struct_.generics);
 
-	let ctx = StructRenderContext::new(state, item, generics, where_clause);
+		// Collect inline traits first while we have immutable access
+		let inline_traits: Vec<String> = collect_inline_traits(state, &struct_.impls)
+			.into_iter()
+			.map(|s| s.to_string())
+			.collect();
 
-	let rendered_struct = match &struct_.kind {
-		StructKind::Unit => Some(render_struct_unit(&ctx)),
-		StructKind::Tuple(fields) => render_struct_tuple(state, &ctx, fields),
-		StructKind::Plain { fields, .. } => Some(render_struct_plain(state, &ctx, fields)),
+		let ctx = StructRenderContext::new(state, item, generics, where_clause);
+
+		let rendered = match &struct_.kind {
+			StructKind::Unit => Some(render_struct_unit(&ctx)),
+			StructKind::Tuple(fields) => render_struct_tuple(state, &ctx, fields),
+			StructKind::Plain { fields, .. } => Some(render_struct_plain(state, &ctx, fields)),
+		};
+
+		rendered.map(|r| {
+			let mut output = String::new();
+			output.push_str(&docs);
+			if !inline_traits.is_empty() {
+				output.push_str(&format!("#[derive({})]\n", inline_traits.join(", ")));
+			}
+			output.push_str(&r);
+			output
+		})
 	};
 
-	let mut output = String::new();
-
-	if let Some(rendered) = rendered_struct {
-		output.push_str(&docs);
-		if !inline_traits.is_empty() {
-			output.push_str(&format!("#[derive({})]\n", inline_traits.join(", ")));
-		}
-		output.push_str(&rendered);
-	}
+	let mut output = rendered_struct.unwrap_or_default();
 
 	// Render impl blocks
 	for impl_id in &struct_.impls {
@@ -378,6 +400,12 @@ pub fn render_struct_field(
 		return String::new();
 	}
 
+	if state.selection_is_full_source(field_id) && let Some(span) = &field_item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("{source},\n");
+		}
+	}
+
 	let ty = extract_item!(field_item, ItemEnum::StructField);
 	let mut out = String::new();
 	out.push_str(&docs(field_item));
@@ -392,59 +420,66 @@ pub fn render_struct_field(
 
 /// Render an enum definition, including variants.
 pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> String {
-	let mut output = docs(item);
-
 	let enum_ = extract_item!(item, ItemEnum::Enum);
 
 	if !state.selection_context_contains(&item.id) {
 		return String::new();
 	}
 
-	// Collect inline traits first while we have immutable access
-	let inline_traits: Vec<String> = collect_inline_traits(state, &enum_.impls)
-		.into_iter()
-		.map(|s| s.to_string())
-		.collect();
+	let rendered_enum = if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		super::utils::extract_source(span, state.config.source_root.as_deref()).ok().map(|s| format!("{s}\n\n"))
+	} else {
+		let mut output = docs(item);
 
-	let ctx = EnumRenderContext::new(
-		state,
-		item,
-		render_generics(&enum_.generics),
-		render_where_clause(&enum_.generics),
-	);
+		// Collect inline traits first while we have immutable access
+		let inline_traits: Vec<String> = collect_inline_traits(state, &enum_.impls)
+			.into_iter()
+			.map(|s| s.to_string())
+			.collect();
 
-	if !inline_traits.is_empty() {
-		output.push_str(&format!("#[derive({})]\n", inline_traits.join(", ")));
-	}
+		let ctx = EnumRenderContext::new(
+			state,
+			item,
+			render_generics(&enum_.generics),
+			render_where_clause(&enum_.generics),
+		);
 
-	output.push_str(&format!(
-		"{}enum {}{}{} {{\n",
-		render_vis(item),
-		render_name(item),
-		ctx.generics(),
-		ctx.where_clause()
-	));
-	let gaps = GapController::new("    ");
-	gaps.begin_section(state);
-
-	for variant_id in &enum_.variants {
-		if !ctx.should_render_variant(state, variant_id) {
-			state.mark_skipped();
-			continue;
+		if !inline_traits.is_empty() {
+			output.push_str(&format!("#[derive({})]\n", inline_traits.join(", ")));
 		}
 
-		let variant_item = must_get(state.crate_data, variant_id);
-		let include_variant_fields = ctx.include_variant_fields(state, variant_item);
-		let rendered = render_enum_variant(state, &ctx, variant_item, include_variant_fields);
-		if !rendered.is_empty() {
-			gaps.emit_if_needed(state, &mut output, &rendered);
-			output.push_str(&rendered);
-		} else {
-			state.mark_skipped();
-		}
-	}
+		output.push_str(&format!(
+			"{}enum {}{}{} {{\n",
+			render_vis(item),
+			render_name(item),
+			ctx.generics(),
+			ctx.where_clause()
+		));
+		let gaps = GapController::new("    ");
+		gaps.begin_section(state);
 
-	output.push_str("}\n\n");
+		for variant_id in &enum_.variants {
+			if !ctx.should_render_variant(state, variant_id) {
+				state.mark_skipped();
+				continue;
+			}
+
+			let variant_item = must_get(state.crate_data, variant_id);
+			let include_variant_fields = ctx.include_variant_fields(state, variant_item);
+			let rendered = render_enum_variant(state, &ctx, variant_item, include_variant_fields);
+			if !rendered.is_empty() {
+				gaps.emit_if_needed(state, &mut output, &rendered);
+				output.push_str(&rendered);
+			} else {
+				state.mark_skipped();
+			}
+		}
+
+		output.push_str("}\n\n");
+		Some(output)
+	};
+
+	let mut output = rendered_enum.unwrap_or_default();
 
 	// Render impl blocks
 	for impl_id in &enum_.impls {
@@ -467,6 +502,12 @@ fn render_enum_variant(
 	item: &Item,
 	include_all_fields: bool,
 ) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("    {source},\n");
+		}
+	}
+
 	let mut output = docs(item);
 	let variant = extract_item!(item, ItemEnum::Variant);
 
@@ -663,7 +704,13 @@ fn is_visible(state: &RenderState, item: &Item) -> bool {
 }
 
 /// Render a function or method signature.
-fn render_function_item(_state: &RenderState, item: &Item, is_trait_method: bool) -> String {
+fn render_function_item(state: &RenderState, item: &Item, is_trait_method: bool) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("{source}\n\n");
+		}
+	}
+
 	let mut output = docs(item);
 	let function = extract_item!(item, ItemEnum::Function);
 
@@ -701,7 +748,13 @@ fn render_function_item(_state: &RenderState, item: &Item, is_trait_method: bool
 }
 
 /// Render a constant definition.
-fn render_constant_item(_state: &RenderState, item: &Item) -> String {
+fn render_constant_item(state: &RenderState, item: &Item) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("{source}\n\n");
+		}
+	}
+
 	let mut output = docs(item);
 
 	let (type_, const_) = extract_item!(item, ItemEnum::Constant { type_, const_ });
@@ -717,7 +770,13 @@ fn render_constant_item(_state: &RenderState, item: &Item) -> String {
 }
 
 /// Render a type alias with generics, bounds, and visibility.
-fn render_type_alias_item(_state: &RenderState, item: &Item) -> String {
+fn render_type_alias_item(state: &RenderState, item: &Item) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("{source}\n\n");
+		}
+	}
+
 	let type_alias = extract_item!(item, ItemEnum::TypeAlias);
 	let mut output = docs(item);
 

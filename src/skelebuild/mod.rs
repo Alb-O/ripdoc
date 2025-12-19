@@ -14,7 +14,16 @@ pub struct SkeleState {
 	/// Path to the output file where skeletonized code is written.
 	pub output_path: Option<PathBuf>,
 	/// List of targets that have been added to the skeleton.
-	pub targets: Vec<String>,
+	pub targets: Vec<SkeleTarget>,
+}
+
+/// A target in the skeleton build.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct SkeleTarget {
+	/// The target path (e.g., "ratatui::widgets::Block").
+	pub path: String,
+	/// Whether to include the full source code.
+	pub full: bool,
 }
 
 impl SkeleState {
@@ -69,14 +78,14 @@ impl SkeleState {
 		let mut crate_selections = HashMap::new();
 
 		use crate::cargo_utils::resolve_target;
-		for target_str in &self.targets {
-			let resolved = resolve_target(target_str, false)?;
+		for target in &self.targets {
+			let resolved = resolve_target(&target.path, false)?;
 			for rt in resolved {
 				let key = rt.package_root().to_path_buf();
 				let entry = crate_selections
 					.entry(key)
 					.or_insert_with(|| (rt, Vec::new()));
-				entry.1.push(target_str.clone());
+				entry.1.push(target.clone());
 			}
 		}
 
@@ -95,27 +104,62 @@ impl SkeleState {
 			let index = SearchIndex::build(&crate_data, true, Some(rt.package_root()));
 
 			let mut all_results = Vec::new();
+			let mut full_source_ids = std::collections::HashSet::new();
+
 			for t in &targets {
-				let mut options = SearchOptions::new(t);
+				let mut options = SearchOptions::new(&t.path);
 				options.include_private = true;
 				options.domains = SearchDomain::PATHS;
 
 				let results = index.search(&options);
 
 				// If exact path match failed, try matching without the crate name prefix
-				if results.is_empty() {
-					if let Ok(parsed) = crate::cargo_utils::target::Target::parse(t) {
+				let final_results = if results.is_empty() {
+					if let Ok(parsed) = crate::cargo_utils::target::Target::parse(&t.path) {
 						let query = parsed.path.join("::");
 						if !query.is_empty() {
 							let mut fallback_options = SearchOptions::new(&query);
 							fallback_options.include_private = true;
 							fallback_options.domains = SearchDomain::PATHS;
-							all_results.extend(index.search(&fallback_options));
+							// Use case sensitive search for fallback to avoid matching crate name
+							fallback_options.case_sensitive = true;
+							index.search(&fallback_options)
+						} else {
+							Vec::new()
 						}
+					} else {
+						Vec::new()
 					}
 				} else {
-					all_results.extend(results);
+					results
+				};
+
+				if t.full {
+					for res in &final_results {
+						// Don't mark the crate root for full source injection via fallback
+						if res.kind == crate::core_api::SearchItemKind::Crate {
+							continue;
+						}
+						full_source_ids.insert(res.item_id);
+
+						// Also mark associated impl blocks for full source injection
+						if let Some(item) = crate_data.index.get(&res.item_id) {
+							match &item.inner {
+								rustdoc_types::ItemEnum::Struct(s) => {
+									full_source_ids.extend(s.impls.iter().copied());
+								}
+								rustdoc_types::ItemEnum::Enum(e) => {
+									full_source_ids.extend(e.impls.iter().copied());
+								}
+								rustdoc_types::ItemEnum::Trait(tr) => {
+									full_source_ids.extend(tr.items.iter().copied());
+								}
+								_ => {}
+							}
+						}
+					}
 				}
+				all_results.extend(final_results);
 			}
 
 			if all_results.is_empty() {
@@ -123,12 +167,13 @@ impl SkeleState {
 				continue;
 			}
 
-			let selection = build_render_selection(&index, &all_results, true);
+			let selection = build_render_selection(&index, &all_results, true, full_source_ids);
 			let renderer = Renderer::default()
 				.with_format(ripdoc.render_format())
 				.with_private_items(true)
 				.with_source_labels(ripdoc.render_source_labels())
-				.with_selection(selection);
+				.with_selection(selection)
+				.with_source_root(rt.package_root().to_path_buf());
 
 			let mut rendered = renderer.render(&crate_data)?;
 
@@ -153,7 +198,12 @@ impl SkeleState {
 /// Action to perform on the skelebuild state.
 pub enum SkeleAction {
 	/// Add a target.
-	Add(String),
+	Add {
+		/// Target path to add.
+		target: String,
+		/// Whether to include full source code.
+		full: bool,
+	},
 	/// Remove a target.
 	Remove(String),
 	/// Reset state.
@@ -175,14 +225,21 @@ pub fn run_skelebuild(
 	}
 
 	match action {
-		Some(SkeleAction::Add(target_str)) => {
-			if !state.targets.contains(&target_str) {
-				state.targets.push(target_str.clone());
-				println!("Added target: {}", target_str);
+		Some(SkeleAction::Add { target, full }) => {
+			if !state.targets.iter().any(|t| t.path == target) {
+				state.targets.push(SkeleTarget {
+					path: target.clone(),
+					full,
+				});
+				println!(
+					"Added target: {} (full: {})",
+					target,
+					if full { "yes" } else { "no" }
+				);
 			}
 		}
 		Some(SkeleAction::Remove(target_str)) => {
-			state.targets.retain(|t| t != &target_str);
+			state.targets.retain(|t| t.path != target_str);
 			println!("Removed target: {}", target_str);
 		}
 		Some(SkeleAction::Reset) => {
@@ -206,7 +263,10 @@ pub fn run_skelebuild(
 		.unwrap_or_else(|| PathBuf::from("skeleton.md"));
 	println!("Skeleton state:");
 	println!("  Output: {}", output_path.display());
-	println!("  Targets: {:?}", state.targets);
+	println!("  Targets:");
+	for t in &state.targets {
+		println!("    - {} (full: {})", t.path, t.full);
+	}
 
 	Ok(())
 }

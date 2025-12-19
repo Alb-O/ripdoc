@@ -124,6 +124,14 @@ impl<'a, 'b> RenderState<'a, 'b> {
 		}
 	}
 
+	/// Check if an item should be rendered with its full source code.
+	pub fn selection_is_full_source(&self, id: &Id) -> bool {
+		match self.selection() {
+			Some(selection) => selection.full_source().contains(id),
+			None => false,
+		}
+	}
+
 	/// Determine whether a child item should be rendered based on its parent and selection context.
 	pub fn selection_allows_child(&self, parent_id: &Id, child_id: &Id) -> bool {
 		if self.selection().is_none() {

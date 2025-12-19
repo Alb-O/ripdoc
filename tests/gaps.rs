@@ -52,7 +52,8 @@ fn use_glob_emits_single_gap_marker() {
 	let matches = HashSet::from([target_id]);
 	let context = HashSet::from([crate_data.root, inner_id, target_id, use_id]);
 	let expanded = HashSet::new();
-	let selection = RenderSelection::new(matches, context, expanded);
+	let full_source = HashSet::new();
+	let selection = RenderSelection::new(matches, context, expanded, full_source);
 
 	let renderer = Renderer::default()
 		.with_private_items(true)

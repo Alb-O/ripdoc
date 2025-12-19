@@ -45,12 +45,22 @@ pub fn should_render_impl(impl_: &Impl, render_auto_impls: bool) -> bool {
 
 /// Render an implementation block, respecting filtering rules.
 pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> String {
-	let mut output = docs(item);
-	let impl_ = extract_item!(item, ItemEnum::Impl);
-
 	if !state.selection_context_contains(&item.id) {
 		return String::new();
 	}
+
+	if state.selection_is_full_source(&item.id) {
+		if let Some(span) = &item.span {
+			if let Ok(source) =
+				super::utils::extract_source(span, state.config.source_root.as_deref())
+			{
+				return format!("{source}\n\n");
+			}
+		}
+	}
+
+	let mut output = docs(item);
+	let impl_ = extract_item!(item, ItemEnum::Impl);
 
 	let selection_active = state.selection().is_some();
 	let parent_expanded = match &impl_.for_ {
@@ -141,6 +151,16 @@ pub fn render_impl_item(
 		return String::new();
 	}
 
+	if state.selection_is_full_source(&item.id) {
+		if let Some(span) = &item.span {
+			if let Ok(source) =
+				super::utils::extract_source(span, state.config.source_root.as_deref())
+			{
+				return format!("{source}\n\n");
+			}
+		}
+	}
+
 	match &item.inner {
 		ItemEnum::Function(_) => render_function(state, item, false),
 		ItemEnum::Constant { .. } => render_constant(state, item),
@@ -152,13 +172,19 @@ pub fn render_impl_item(
 
 /// Render a trait definition.
 pub fn render_trait(state: &mut RenderState, item: &Item) -> String {
-	let mut output = docs(item);
-
-	let trait_ = extract_item!(item, ItemEnum::Trait);
-
 	if !state.selection_context_contains(&item.id) {
 		return String::new();
 	}
+
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+			return format!("{source}\n\n");
+		}
+	}
+
+	let mut output = docs(item);
+
+	let trait_ = extract_item!(item, ItemEnum::Trait);
 
 	let selection = super::items::SelectionView::new(state, &item.id, true);
 

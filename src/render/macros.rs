@@ -9,7 +9,14 @@ static MACRO_PLACEHOLDER_REGEX: Lazy<Regex> =
 	Lazy::new(|| Regex::new(r"\}\s*\{\s*\.\.\.\s*\}\s*$").expect("valid macro fallback pattern"));
 
 /// Render a macro_rules! definition.
-pub fn render_macro(item: &Item) -> String {
+pub fn render_macro(state: &crate::render::state::RenderState, item: &Item) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+		{
+			return format!("{source}\n\n");
+		}
+	}
 	use super::syntax::is_reserved_word;
 
 	let mut output = docs(item);
@@ -68,7 +75,14 @@ pub fn render_macro(item: &Item) -> String {
 }
 
 /// Render a procedural macro definition.
-pub fn render_proc_macro(item: &Item) -> String {
+pub fn render_proc_macro(state: &crate::render::state::RenderState, item: &Item) -> String {
+	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
+		if let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+		{
+			return format!("{source}\n\n");
+		}
+	}
 	let mut output = docs(item);
 
 	let fn_name = render_name(item);

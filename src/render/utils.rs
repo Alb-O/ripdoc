@@ -109,3 +109,36 @@ pub enum FilterMatch {
 	/// The filter does not match the path.
 	Miss,
 }
+
+/// Extract source code from a file based on span information.
+pub fn extract_source(
+	span: &rustdoc_types::Span,
+	source_root: Option<&std::path::Path>,
+) -> std::io::Result<String> {
+	let mut path = span.filename.clone();
+	if let Some(root) = source_root
+		&& path.is_relative()
+	{
+		path = root.join(path);
+	}
+
+	let file_content = std::fs::read_to_string(&path)?;
+	let lines: Vec<&str> = file_content.lines().collect();
+
+
+
+	if span.begin.0 == 0 || span.begin.0 > lines.len() {
+		return Ok(String::new());
+	}
+
+	let start_line = span.begin.0 - 1;
+	let end_line = std::cmp::min(span.end.0, lines.len());
+
+	let mut extracted = Vec::new();
+	for i in start_line..end_line {
+		extracted.push(lines[i]);
+	}
+
+	let result = extracted.join("\n");
+	Ok(result)
+}
