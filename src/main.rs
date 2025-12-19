@@ -195,9 +195,13 @@ enum SkelebuildSubcommand {
 		/// Text to inject.
 		content: String,
 
-		/// Inject after this target.
-		#[arg(long)]
+		/// Inject after this target (by path or content prefix).
+		#[arg(long, conflicts_with = "at")]
 		after: Option<String>,
+
+		/// Inject at this numeric index (0-based, use `status` to see indices).
+		#[arg(long, conflicts_with = "after")]
+		at: Option<usize>,
 
 		/// Output file for the skeleton.
 		#[arg(short = 'O', long)]
@@ -720,12 +724,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 					SkelebuildSubcommand::Inject {
 						content,
 						after,
+						at,
 						output: o,
 					} => {
 						if o.is_some() {
 							output = o;
 						}
-						Some(SkeleAction::Inject { content, after })
+						Some(SkeleAction::Inject { content, after, at })
 					}
 					SkelebuildSubcommand::Remove { target, output: o } => {
 						if o.is_some() {

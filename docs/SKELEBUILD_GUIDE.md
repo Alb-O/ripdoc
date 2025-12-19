@@ -25,7 +25,9 @@ pub struct Config<'a> {
 ```
 
 ### 2. Inject Core Logic
-When you need to see the internal implementation of a specific component, use the `--full` (or `-f`) flag. `ripdoc` will extract the actual source code and associated `impl` blocks from the disk.
+When you need to see the internal implementation of a specific component, use the `--full` (or `-f`) flag on `skelebuild add`. `ripdoc` will extract the actual source code and associated `impl` blocks from the disk.
+
+> `--full` is a `skelebuild add` flag (not a `ripdoc print` flag).
 
 ```bash
 ripdoc skelebuild add bat::controller::Controller::run --full
@@ -49,14 +51,24 @@ impl Controller<'_> {
 ```
 
 ### 3. Interleave Manual Commentary
-Use the `inject` subcommand to add your own analysis or notes between code sections. Use `--after <target>` to place the comment precisely.
+Use the `inject` subcommand to add your own analysis or notes between code sections.
+
+- Prefer `--at <index>` for reliability (use `ripdoc skelebuild status` to see indices).
+- Use `--after <string>` for quick placement; it matches by exact string or prefix, and errors if there are 0 or multiple matches.
 
 > **Shell Quoting**: Use **single quotes** (`'...'`) for injection text containing Markdown or code references like `min()` or `max()`. Double quotes cause Bash to interpret parentheses as command substitution, leading to errors like `command not found`.
 
 ```bash
-# Correct: single quotes preserve special characters
+# Show indices
+ripdoc skelebuild status
+
+# Robust: insert at a specific index
 ripdoc skelebuild inject '## Analysis: Paging Logic
-The `run()` method handles the core paging state machine using min() and max().' --after bat::controller::Controller::run
+The `run()` method handles the core paging state machine using min() and max().' --at 3
+
+# Convenient: insert after a previous target (exact or prefix match)
+ripdoc skelebuild inject '## Analysis: Paging Logic
+The `run()` method handles the core paging state machine.' --after bat::controller::Controller::run
 
 # Incorrect: double quotes cause shell errors
 # ripdoc skelebuild inject "calls min() and max()" ...

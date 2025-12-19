@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use crate::core_api::search::{SearchDomain, SearchIndex, SearchOptions, build_render_selection};
+use crate::core_api::error::RipdocError;
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
 
@@ -285,8 +286,10 @@ pub enum SkeleAction {
 	Inject {
 		/// Text to inject.
 		content: String,
-		/// Optional target path to inject after.
+		/// Optional target path/content prefix to inject after.
 		after: Option<String>,
+		/// Optional numeric index (0-based) to insert at.
+		at: Option<usize>,
 	},
 	/// Remove an entry.
 	Remove(String),
@@ -329,22 +332,58 @@ pub fn run_skelebuild(
 				);
 			}
 		}
-		Some(SkeleAction::Inject { content, after }) => {
+		Some(SkeleAction::Inject { content, after, at }) => {
 			let injection = SkeleEntry::Injection(SkeleInjection { content });
-			if let Some(after_path) = after {
-				let after_path_upper = after_path.to_uppercase();
-				if after_path_upper == "START" || after_path_upper == "TOP" || after_path_upper == "BEGIN" {
+			if let Some(index) = at {
+				if index > state.entries.len() {
+					return Err(RipdocError::InvalidTarget(format!(
+						"Invalid --at index {index}; valid range is 0..={}.",
+						state.entries.len()
+					)));
+				}
+				state.entries.insert(index, injection);
+				println!("Injected commentary at index {index}.");
+			} else if let Some(after_key) = after {
+				let after_key = after_key.trim().to_string();
+				let after_upper = after_key.to_uppercase();
+				if after_upper == "START" || after_upper == "TOP" || after_upper == "BEGIN" {
 					state.entries.insert(0, injection);
 					println!("Injected commentary at the start.");
-				} else if let Some(pos) = state.entries.iter().position(|e| match e {
-					SkeleEntry::Target(t) => t.path == after_path,
-					SkeleEntry::Injection(i) => i.content == after_path,
-				}) {
-					state.entries.insert(pos + 1, injection);
-					println!("Injected commentary after {}", after_path);
 				} else {
-					state.entries.push(injection);
-					println!("Target '{}' not found; injected at end.", after_path);
+					let mut matches: Vec<usize> = Vec::new();
+					for (idx, entry) in state.entries.iter().enumerate() {
+						let is_match = match entry {
+							SkeleEntry::Target(t) => t.path == after_key || t.path.starts_with(&after_key),
+							SkeleEntry::Injection(i) => {
+								i.content == after_key || i.content.starts_with(&after_key)
+							}
+						};
+						if is_match {
+							matches.push(idx);
+						}
+					}
+
+					match matches.as_slice() {
+						[] => {
+						return Err(RipdocError::InvalidTarget(format!(
+							"No entry matches --after '{}'. Use `ripdoc skelebuild status` to see indices, then use `inject --at <index>`.",
+							after_key
+						)));
+
+						}
+						[only] => {
+							let insert_at = only + 1;
+							state.entries.insert(insert_at, injection);
+							println!("Injected commentary after entry #{only}.");
+						}
+						_ => {
+						return Err(RipdocError::InvalidTarget(format!(
+							"Ambiguous --after '{}': matches entries {:?}. Use `inject --at <index>`.",
+							after_key, matches
+						)));
+
+						}
+					}
 				}
 			} else {
 				state.entries.push(injection);
@@ -380,19 +419,26 @@ pub fn run_skelebuild(
 		.clone()
 		.unwrap_or_else(|| PathBuf::from("skeleton.md"));
 	println!("Skeleton state:");
+	println!("  State file: {}", SkeleState::state_file().display());
 	println!("  Output: {}", output_path.display());
 	println!("  Flat: {}", state.flat);
-	println!("  Entries:");
-	for e in &state.entries {
+	println!("  Entries: {}", state.entries.len());
+	println!("  Tip: use `inject --at <index>` to avoid brittle matching.");
+	println!("  Entry list:");
+	for (idx, e) in state.entries.iter().enumerate() {
 		match e {
-			SkeleEntry::Target(t) => println!("    - [Target] {} (full: {})", t.path, t.full),
+			SkeleEntry::Target(t) => {
+				println!("    {idx}: [Target] {} (full: {})", t.path, t.full)
+			}
 			SkeleEntry::Injection(i) => {
-				let summary = if i.content.len() > 40 {
-					format!("{}...", &i.content[..37])
+				let trimmed = i.content.trim();
+				let compact = trimmed.replace('\n', "\\n");
+				let summary = if compact.len() > 80 {
+					format!("{}...", &compact[..77])
 				} else {
-					i.content.clone()
+					compact
 				};
-				println!("    - [Inject] {}", summary.replace('\n', "\\n"));
+				println!("    {idx}: [Inject] {summary}");
 			}
 		}
 	}
