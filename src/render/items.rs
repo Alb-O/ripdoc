@@ -153,6 +153,10 @@ pub fn render_item(
 	item: &Item,
 	force_private: bool,
 ) -> String {
+	if matches!(item.inner, ItemEnum::Module(_)) && !state.visited.insert(item.id) {
+		return String::new();
+	}
+
 	if !state.selection_context_contains(&item.id) {
 		return String::new();
 	}

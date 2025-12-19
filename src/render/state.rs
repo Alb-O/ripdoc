@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rustdoc_types::{Crate, Id, Item};
 
 use super::core::{RenderSelection, Renderer};
@@ -55,6 +57,8 @@ pub struct RenderState<'a, 'b> {
 	pub filter_matched: bool,
 	/// Tracks whether items were skipped (used for gap markers in search mode).
 	pub gap_state: GapState,
+	/// Tracks items already rendered to prevent infinite recursion/redundancy.
+	pub visited: HashSet<Id>,
 }
 
 impl<'a, 'b> RenderState<'a, 'b> {
@@ -65,6 +69,7 @@ impl<'a, 'b> RenderState<'a, 'b> {
 			crate_data,
 			filter_matched: false,
 			gap_state: GapState::Clear,
+			visited: HashSet::new(),
 		}
 	}
 
