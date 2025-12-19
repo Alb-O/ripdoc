@@ -191,6 +191,8 @@ pub fn render_item(
 
 	if !output.is_empty()
 		&& state.config.render_source_labels
+		&& !matches!(item.inner, ItemEnum::Use(_))
+		&& !(matches!(item.inner, ItemEnum::Module(_)) && state.config.flat)
 		&& let Some(span) = &item.span
 		&& state.current_file.as_ref() != Some(&span.filename)
 	{

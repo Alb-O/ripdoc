@@ -190,6 +190,26 @@ impl SkeleState {
 										rustdoc_types::ItemEnum::Trait(tr) => {
 											full_source_ids.extend(tr.items.iter().copied());
 										}
+										rustdoc_types::ItemEnum::Use(u) => {
+											if let Some(id) = &u.id {
+												full_source_ids.insert(*id);
+												// Recursively find impls for the imported item if it's a struct/enum/trait
+												if let Some(imported) = crate_data.index.get(id) {
+													match &imported.inner {
+														rustdoc_types::ItemEnum::Struct(s) => {
+															full_source_ids.extend(s.impls.iter().copied());
+														}
+														rustdoc_types::ItemEnum::Enum(e) => {
+															full_source_ids.extend(e.impls.iter().copied());
+														}
+														rustdoc_types::ItemEnum::Trait(tr) => {
+															full_source_ids.extend(tr.items.iter().copied());
+														}
+														_ => {}
+													}
+												}
+											}
+										}
 										_ => {}
 									}
 								}
@@ -202,8 +222,7 @@ impl SkeleState {
 						continue;
 					}
 
-					let selection =
-						build_render_selection(&index, &all_results, !self.flat, full_source_ids);
+					let selection = build_render_selection(&index, &all_results, true, full_source_ids);
 					let renderer = Renderer::default()
 						.with_format(ripdoc.render_format())
 						.with_private_items(true)
