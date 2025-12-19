@@ -158,7 +158,21 @@ pub fn extract_source(
 
 	let mut extracted = Vec::new();
 	for i in start_line..end_line {
-		extracted.push(lines[i]);
+		let mut line = lines[i].to_string();
+		// Convert inner doc comments to outer ones if they appear in a snippet.
+		// //! -> ///
+		// /*! -> /**
+		let trimmed = line.trim_start();
+		if trimmed.starts_with("//!") {
+			if let Some(pos) = line.find("//!") {
+				line.replace_range(pos..pos + 3, "///");
+			}
+		} else if trimmed.starts_with("/*!") {
+			if let Some(pos) = line.find("/*!") {
+				line.replace_range(pos..pos + 3, "/**");
+			}
+		}
+		extracted.push(line);
 	}
 
 	let result = extracted.join("\n");

@@ -200,8 +200,13 @@ impl Renderer {
 	}
 
 	fn render_rust(&self, raw_output: &str) -> Result<String> {
-		let formatted = self.formatter.format_str(raw_output)?;
-		Ok(self.apply_postprocessors(formatted))
+		match self.formatter.format_str(raw_output) {
+			Ok(formatted) => Ok(self.apply_postprocessors(formatted)),
+			Err(e) => {
+				eprintln!("Warning: An error occurred while formatting the source code: {e}");
+				Ok(self.apply_postprocessors(raw_output.to_string()))
+			}
+		}
 	}
 
 	fn render_markdown(&self, raw_output: String) -> Result<String> {
