@@ -117,23 +117,34 @@ pub fn extract_source(
 ) -> std::io::Result<String> {
 	let mut path = span.filename.clone();
 
-	// Heuristic for finding the file, especially in workspaces
-	if !path.exists() {
+	// Prefer resolving relative paths against the provided source root.
+	// If we check `path.exists()` first, a relative `src/lib.rs`/`src/main.rs` can accidentally
+	// resolve against the current working directory (e.g. when rendering a temporary crate while
+	// running tests from this repo).
+	if let Some(root) = source_root
+		&& span.filename.is_relative()
+	{
+		let joined = root.join(&span.filename);
+		if joined.exists() {
+			path = joined;
+		} else {
+			// Try stripping leading components if it might be relative to a workspace root
+			// but we are in a package root.
+			let mut components = span.filename.components();
+			while components.next().is_some() {
+				let candidate = root.join(components.as_path());
+				if candidate.exists() {
+					path = candidate;
+					break;
+				}
+			}
+		}
+	} else if !path.exists() {
+		// Heuristic for finding the file, especially in workspaces.
 		if let Some(root) = source_root {
 			let joined = root.join(&span.filename);
 			if joined.exists() {
 				path = joined;
-			} else if span.filename.is_relative() {
-				// Try stripping leading components if it might be relative to a workspace root
-				// but we are in a package root.
-				let mut components = span.filename.components();
-				while components.next().is_some() {
-					let candidate = root.join(components.as_path());
-					if candidate.exists() {
-						path = candidate;
-						break;
-					}
-				}
 			}
 		}
 	}

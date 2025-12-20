@@ -19,13 +19,15 @@
 ## Output knobs
 
 - Source labels: `--no-source-labels`
-- Include implementation spans: `--implementation`
+- Include implementation spans: `--implementation` (for containers, may include whole `impl` blocks for best detail)
 - Include whole files: `--raw-source` / `--source`
 - Color: auto-disabled when stdout isn’t a TTY; force off with `--no-color` or `NO_COLOR=1`.
 
 ## skelebuild
 
 - Stateful builder: `ripdoc skelebuild add <target> [ITEM] [--implementation|--raw-source]`
-- Interleave notes: `ripdoc skelebuild inject '...markdown...' --after-target <spec>` (or `--before-target` / `--at <index>`)
+- Interleave notes: `ripdoc skelebuild inject '...markdown...' --after-target <spec>` (or `--before-target`; `--at <index>` is precise but indices shift)
+- Markdown spacing: if you inject lists/callouts, end with a blank line so the next `### Source: ...` header stays readable.
+- Source spans: ripdoc resolves relative span paths against the target crate root.
 - Manage state: `status` (read-only), `rebuild` (rewrites output), `remove`, `reset` (use `skelebuild --show-state ...` to print full state)
 - State file: `~/.local/state/ripdoc/skelebuild.json`

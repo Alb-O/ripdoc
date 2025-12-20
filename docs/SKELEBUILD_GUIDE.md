@@ -32,10 +32,12 @@ ripdoc skelebuild rebuild
 
 ## Tips
 
-- Prefer `inject --after-target <spec>`; `--at <index>` works but indices shift as you insert.
+- Prefer `inject --after-target <spec>` / `--before-target <spec>`; `--at <index>` works, but indices shift as you insert.
 - `status` is read-only (it won’t rewrite your output file); pass `--show-state` to print the full state after other commands.
-- `--implementation` includes method/function bodies when available; non-callables still render as a skeleton for context.
+- `--implementation` includes method/function bodies when available; for containers it will also pull in relevant `impl` blocks when possible.
 - If a target can’t be resolved or a source file can’t be read, rebuild writes a visible Markdown warning block (`> [!ERROR] ...`) so missing code isn’t silent.
+- Source path resolution is crate-root aware: relative spans like `src/main.rs` are resolved against the target crate, not your current working directory.
+- Markdown interleaving: `skelebuild` inserts blank lines between blocks, but if you inject an unterminated list/callout, add a trailing blank line so the next `### Source: ...` header doesn’t get “captured” by Markdown formatting.
 
 ## Finding the right item path
 
@@ -49,7 +51,15 @@ For local targets, the `crate::...` prefix comes from rustdoc.
 ripdoc list ./path/to/crate --search TerminalState --search-spec path
 ```
 
-`skelebuild` tries some path fallbacks (e.g. stripping/replacing a mismatched crate prefix) and prefers matches whose source lives in the target crate. For maximum precision, use the exact `crate::...` path from `list`.
+### Inherent vs trait methods
+
+If a type has both an inherent method and a trait method with the same name, you may need to use a more specific path:
+
+- Inherent method: `crate::Type::method`
+- Trait method (often): `crate::Trait::method`
+- Fully-qualified (when needed): `<crate::Type as crate::Trait>::method`
+
+`skelebuild` tries some path fallbacks (e.g. stripping/replacing a mismatched crate prefix) and prefers matches whose source lives in the target crate. For maximum precision and disambiguation, use the exact path from `ripdoc list ... --search <name> --search-spec path`.
 
 ## Positional item mode
 

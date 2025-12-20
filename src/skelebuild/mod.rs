@@ -13,6 +13,20 @@ use crate::core_api::search::{
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
 
+fn ensure_markdown_block_sep(out: &mut String) {
+	if out.is_empty() {
+		return;
+	}
+	if out.ends_with("\n\n") {
+		return;
+	}
+	if out.ends_with('\n') {
+		out.push('\n');
+	} else {
+		out.push_str("\n\n");
+	}
+}
+
 fn normalize_target_spec_for_storage(target: &str) -> String {
 	let parsed = crate::cargo_utils::target::Target::parse(target);
 	let Ok(parsed) = parsed else {
@@ -72,11 +86,11 @@ fn find_target_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 
 	match matches.as_slice() {
 		[] => Err(RipdocError::InvalidTarget(format!(
-			"No target matches '{spec}'. Use `ripdoc skelebuild status` to see indices.",
+			"No target matches '{spec}'. Use `ripdoc skelebuild status` to see entries.",
 		))),
 		[only] => Ok(*only),
 		_ => Err(RipdocError::InvalidTarget(format!(
-			"Ambiguous target match '{spec}': matches entries {matches:?}. Use `inject --at <index>`.",
+			"Ambiguous target match '{spec}': matches entries {matches:?}. Use a more specific `--after-target/--before-target` spec, or `inject --at <index>`.",
 		))),
 	}
 }
@@ -230,16 +244,16 @@ impl SkeleState {
 
 		let mut final_output = String::new();
 		let mut last_file: Option<PathBuf> = None;
-		let global_visited =
-			std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
 
 		for group in grouped_entries {
 			match group {
 				SkeleGroup::Injection(content) => {
+					ensure_markdown_block_sep(&mut final_output);
 					final_output.push_str(&content);
-					final_output.push_str("\n\n");
+					ensure_markdown_block_sep(&mut final_output);
 				}
 				SkeleGroup::Targets { pkg_root, targets } => {
+					ensure_markdown_block_sep(&mut final_output);
 					let crate_data = crates_data.get(&pkg_root).unwrap();
 					let mut warnings: Vec<String> = Vec::new();
 					let mut full_source = HashSet::new();
@@ -365,9 +379,10 @@ impl SkeleState {
 							});
 							if pool.len() > 1 {
 								warnings.push(format!(
-									"> [!WARNING] Ambiguous match for `{}`; using `{}`",
+									"> [!WARNING] Ambiguous match for `{}`; using `{}`. Tip: run `ripdoc list {}` with `--search ... --search-spec path` and use the exact path.",
 									candidate,
-									pool[0].path_string
+									pool[0].path_string,
+									pkg_root.display(),
 								));
 							}
 							resolved = Some(pool[0].clone());
@@ -392,28 +407,49 @@ impl SkeleState {
 							}
 						}
 
-						if target.implementation {
-							if matches!(base.kind, SearchItemKind::Function | SearchItemKind::Method) {
-								full_source.insert(base.item_id);
-							} else {
-								let prefix = format!("{}::", base.path_string);
-								for entry in index.entries() {
-									if !entry.path_string.starts_with(&prefix) {
-										continue;
+							if target.implementation {
+								if matches!(base.kind, SearchItemKind::Function | SearchItemKind::Method) {
+									full_source.insert(base.item_id);
+								} else {
+									// Prefer full impl blocks when available: individual method spans can sometimes
+									// point at the surrounding `impl` item, and the renderer will reject them.
+									if let Some(item) = crate_data.index.get(&base.item_id) {
+										let impl_ids: Vec<rustdoc_types::Id> = match &item.inner {
+											rustdoc_types::ItemEnum::Struct(struct_) => struct_.impls.clone(),
+											rustdoc_types::ItemEnum::Enum(enum_) => enum_.impls.clone(),
+											rustdoc_types::ItemEnum::Union(union_) => union_.impls.clone(),
+											rustdoc_types::ItemEnum::Trait(trait_) => trait_.implementations.clone(),
+											_ => Vec::new(),
+										};
+										for impl_id in impl_ids {
+											if let Some(impl_item) = crate_data.index.get(&impl_id)
+												&& let Some(span) = &impl_item.span
+												&& resolve_span_path(span).starts_with(&pkg_root)
+											{
+												full_source.insert(impl_id);
+											}
+										}
 									}
-									if !is_local(entry) {
-										continue;
-									}
-									selection_results.push(entry.clone());
-									if matches!(
-										entry.kind,
-										SearchItemKind::Function | SearchItemKind::Method
-									) {
-										full_source.insert(entry.item_id);
+
+									let prefix = format!("{}::", base.path_string);
+									for entry in index.entries() {
+										if !entry.path_string.starts_with(&prefix) {
+											continue;
+										}
+										if !is_local(entry) {
+											continue;
+										}
+										selection_results.push(entry.clone());
+										if matches!(
+											entry.kind,
+											SearchItemKind::Function | SearchItemKind::Method
+										) {
+											full_source.insert(entry.item_id);
+										}
 									}
 								}
 							}
-						}
+
 					}
 
 					// Append raw files first if any.
@@ -469,8 +505,7 @@ impl SkeleState {
 						.with_selection(selection)
 						.with_source_root(pkg_root.clone())
 						.with_plain(self.plain)
-						.with_current_file(last_file.clone())
-						.with_visited(global_visited.clone());
+						.with_current_file(last_file.clone());
 
 					let (rendered, final_file) = renderer.render_ext(crate_data)?;
 					last_file = final_file;
@@ -633,7 +668,7 @@ pub fn run_skelebuild(
 					match matches.as_slice() {
 						[] => {
 							return Err(RipdocError::InvalidTarget(format!(
-								"No entry matches --after '{}'. Use `ripdoc skelebuild status` to see indices, then use `inject --at <index>`.",
+								"No entry matches --after '{}'. Use `ripdoc skelebuild status` to see entries, then use `inject --after-target/--before-target` or `inject --at <index>`.",
 								after_key
 							)));
 						}
@@ -644,7 +679,7 @@ pub fn run_skelebuild(
 						}
 						_ => {
 							return Err(RipdocError::InvalidTarget(format!(
-								"Ambiguous --after '{}': matches entries {:?}. Use `inject --at <index>`.",
+								"Ambiguous --after '{}': matches entries {:?}. Use `inject --after-target/--before-target` with a more specific spec, or `inject --at <index>`.",
 								after_key, matches
 							)));
 						}
@@ -698,7 +733,9 @@ pub fn run_skelebuild(
 		println!("  Output: {}", output_path.display());
 		println!("  Plain mode: {}", state.plain);
 		println!("  Entries: {}", state.entries.len());
-		println!("  Tip: use `inject --at <index>` to avoid brittle matching.");
+		println!(
+			"  Tip: prefer `inject --after-target/--before-target` to avoid index shifting; use `inject --at <index>` for precise placement.",
+		);
 		println!("  Entry list:");
 		for (idx, e) in state.entries.iter().enumerate() {
 			match e {
