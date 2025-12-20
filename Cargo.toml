@@ -1,6 +1,6 @@
 [package]
 name = "ripdoc"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2024"
 authors = ["Albert O'Shea <albertoshea2@gmail.com>"]
 description = "Query Rust docs and crate API from the command line"
