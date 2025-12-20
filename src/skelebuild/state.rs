@@ -87,6 +87,18 @@ pub enum SkeleAction {
 		/// Raw source spec: `/path/to/file.rs[:start[:end]]` (1-based lines).
 		spec: String,
 	},
+	/// Add multiple raw source snippets from disk.
+	AddRawMany {
+		/// Raw source specs: `/path/to/file.rs[:start[:end]]` (1-based lines).
+		specs: Vec<String>,
+	},
+	/// Add targets and raw snippets derived from a git diff.
+	AddChangedResolved {
+		/// Target specs to add.
+		targets: Vec<String>,
+		/// Raw source specs to add.
+		raw_specs: Vec<String>,
+	},
 	/// Inject manual commentary.
 	Inject {
 		/// Text to inject.

@@ -24,6 +24,20 @@ ripdoc skelebuild add ./tome/bin/tome-term \
 # Add raw source directly from disk (useful for tests / code not in rustdoc)
 ripdoc skelebuild add-raw ./path/to/file.rs:336:364
 
+# Add an entire file as raw source
+ripdoc skelebuild add-file ./path/to/file.rs
+
+# Add "changed context" from git diffs (default: tries to resolve touched rustdoc items,
+# and also includes raw-source snippets around each diff hunk)
+
+# Last commit only (the commit at HEAD vs its parent):
+ripdoc skelebuild add-changed --git HEAD^..HEAD --only-rust
+
+# Working tree diffs:
+ripdoc skelebuild add-changed --only-rust              # unstaged changes
+ripdoc skelebuild add-changed --staged --only-rust     # staged changes
+ripdoc skelebuild add-changed --git main...HEAD --only-rust
+
 # Insert your own notes (prefer target-relative insertion)
 # `inject` interprets `\n` as newlines by default.
 ripdoc skelebuild inject '## Notes\nWhy this matters...' --after-target bat::config::Config
@@ -57,7 +71,7 @@ ripdoc skelebuild rebuild
 - `preview` prints the fully rebuilt Markdown to stdout without writing the output file.
 - `--implementation` includes method/function bodies when available; for containers it will also pull in relevant `impl` blocks when possible.
 - Impl-block targeting: you can target an entire impl block with `Type::Trait` (e.g. `Editor::EditorOps`).
-- Raw source snippets: `skelebuild add-raw /path/to/file.rs:START:END` injects arbitrary line ranges (useful for tests which may not appear in rustdoc JSON).
+- Raw source snippets: `skelebuild add-raw /path/to/file.rs:START:END` injects arbitrary line ranges (useful for tests which may not appear in rustdoc JSON). Use `skelebuild add-file /path/to/file.rs` to include a whole file.
 - Validation: `skelebuild add` validates targets by default and fails early; pass `--no-validate` to record an entry without validating it.
 - Errors/warnings are printed to stderr and are not embedded into the generated Markdown output (keeps the output doc clean).
 - Source path resolution is crate-root aware: relative spans like `src/main.rs` are resolved against the target crate, not your current working directory.

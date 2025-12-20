@@ -188,6 +188,98 @@ pub fn run_skelebuild(
 				));
 			}
 		}
+		Some(SkeleAction::AddRawMany { specs }) => {
+			let mut added: Vec<SkeleRawSource> = Vec::new();
+			let mut already: Vec<SkeleRawSource> = Vec::new();
+			let mut added_indices: Vec<usize> = Vec::new();
+
+			for spec in specs {
+				let raw = parse_raw_source_spec(&spec)?;
+				let exists = state.entries.iter().any(|e| match e {
+					SkeleEntry::RawSource(existing) => existing == &raw,
+					_ => false,
+				});
+				if exists {
+					already.push(raw);
+					continue;
+				}
+				added.push(raw.clone());
+				state.entries.push(SkeleEntry::RawSource(raw));
+				added_indices.push(state.entries.len() - 1);
+			}
+
+			should_rebuild = config_changed || !added.is_empty();
+			if added.is_empty() {
+				action_summary = Some(format!(
+					"No change (all raw sources already exist): {}",
+					already.len()
+				));
+			} else {
+				let indices = if added_indices.len() <= 8 {
+					added_indices
+						.iter()
+						.map(|idx| format!("#{idx}"))
+						.collect::<Vec<_>>()
+						.join(", ")
+				} else {
+					format!(
+						"#{}..#{}",
+						added_indices.first().unwrap_or(&0),
+						added_indices.last().unwrap_or(&0)
+					)
+				};
+				action_summary = Some(format!(
+					"Added {} raw sources (entries: {indices})",
+					added.len()
+				));
+			}
+		}
+		Some(SkeleAction::AddChangedResolved { targets, raw_specs }) => {
+			let mut added_targets: Vec<String> = Vec::new();
+			let mut already_targets: Vec<String> = Vec::new();
+			for target in targets {
+				let normalized_target = normalize_target_spec_for_storage(&target);
+				let is_present = state.entries.iter().any(|e| match e {
+					SkeleEntry::Target(t) => t.path == normalized_target,
+					_ => false,
+				});
+				if is_present {
+					already_targets.push(normalized_target);
+					continue;
+				}
+				added_targets.push(normalized_target.clone());
+				state.entries.push(SkeleEntry::Target(SkeleTarget {
+					path: normalized_target,
+					implementation: true,
+					raw_source: false,
+				}));
+			}
+
+			let mut added_raw: Vec<SkeleRawSource> = Vec::new();
+			let mut already_raw: Vec<SkeleRawSource> = Vec::new();
+			for spec in raw_specs {
+				let raw = parse_raw_source_spec(&spec)?;
+				let exists = state.entries.iter().any(|e| match e {
+					SkeleEntry::RawSource(existing) => existing == &raw,
+					_ => false,
+				});
+				if exists {
+					already_raw.push(raw);
+					continue;
+				}
+				added_raw.push(raw.clone());
+				state.entries.push(SkeleEntry::RawSource(raw));
+			}
+
+			should_rebuild = config_changed || !added_targets.is_empty() || !added_raw.is_empty();
+			action_summary = Some(format!(
+				"Added changed-context: {} targets ({} already), {} raw snippets ({} already)",
+				added_targets.len(),
+				already_targets.len(),
+				added_raw.len(),
+				already_raw.len()
+			));
+		}
 		Some(SkeleAction::Inject {
 			content,
 			literal,

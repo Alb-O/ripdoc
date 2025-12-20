@@ -284,9 +284,10 @@ pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Resul
 			format!("\nDid you mean:\n  - {suggestions}")
 		};
 		return Err(RipdocError::InvalidTarget(format!(
-			"No path match found for `{base_query}` in `{}`.{suggestions}\nTip: run `ripdoc list {}` with `--search ... --search-spec path` and use the exact path.",
+			"No path match found for `{base_query}` in `{}`.{suggestions}\n\nQuick recovery:\n  1) `ripdoc list {} --search \"{}\" --search-spec path --private`\n  2) Use the exact `crate::...` path from the listing.\n\nIf the item/module isn't present in rustdoc output (feature-gated or not in the module tree), include raw source via:\n  - `ripdoc skelebuild add-file <path>`\n  - `ripdoc skelebuild add-raw <path[:start[:end]]>`",
 			pkg_root.display(),
 			pkg_root.display(),
+			last_segment,
 		)));
 	};
 	let matched_path = matched_path.unwrap_or_else(|| base_query.clone());

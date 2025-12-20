@@ -9,6 +9,7 @@ use owo_colors::OwoColorize;
 use regex::Regex;
 use ripdoc::cargo_utils::{fetch_readme, find_latest_cached_version, resolve_target};
 use ripdoc::core_api::pattern::escape_regex_preserving_pipes;
+use ripdoc::core_api::search::{SearchIndex, SearchItemKind};
 use ripdoc::{RenderFormat, Ripdoc, SearchDomain, SearchOptions, SourceLocation};
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -165,6 +166,20 @@ struct ReadmeArgs {
 	common: CommonArgs,
 }
 
+#[derive(Debug, Clone, Copy, ValueEnum)]
+/// Optional topic for `ripdoc agents`.
+enum AgentsTopic {
+	/// Stateful skeleton builder (`ripdoc skelebuild ...`).
+	Skelebuild,
+}
+
+#[derive(Args, Clone)]
+struct AgentsArgs {
+	/// Optional agent guide topic.
+	#[arg(value_enum)]
+	topic: Option<AgentsTopic>,
+}
+
 #[derive(Args, Clone)]
 /// Arguments for the `skelebuild` subcommand.
 struct SkelebuildArgs {
@@ -229,6 +244,34 @@ enum SkelebuildSubcommand {
 	AddRaw {
 		/// Raw source spec: `/path/to/file.rs[:start[:end]]` (1-based lines).
 		spec: String,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
+	},
+	/// Add an entire file from disk as raw source.
+	AddFile {
+		/// Path to the file to include.
+		file: std::path::PathBuf,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
+	},
+	/// Add changed-context from a git diff (rustdoc items + raw hunks).
+	AddChanged {
+		/// Git revspec/range to diff (passed to `git diff --name-only`).
+		/// Example: `main...HEAD`.
+		#[arg(long, value_name = "REVSPEC", conflicts_with = "staged")]
+		git: Option<String>,
+
+		/// Use staged changes (`git diff --name-only --cached`).
+		#[arg(long, default_value_t = false)]
+		staged: bool,
+
+		/// Only include Rust source files (`.rs`).
+		#[arg(long, default_value_t = false)]
+		only_rust: bool,
 
 		/// Output file for the skeleton.
 		#[arg(short = 'O', long)]
@@ -333,7 +376,9 @@ enum Command {
 	/// Fetch and print the README of the target crate.
 	Readme(ReadmeArgs),
 	/// Print a dense guide for AI agents.
-	Agents,
+	///
+	/// Also supports topic guides, e.g. `ripdoc agents skelebuild`.
+	Agents(AgentsArgs),
 	/// Build a skeleton incrementally.
 	Skelebuild(SkelebuildArgs),
 }
@@ -453,6 +498,337 @@ fn split_path_target_spec(value: &str) -> Option<(String, String)> {
 	}
 }
 
+#[derive(Debug, Clone)]
+struct DiffHunk {
+	file: std::path::PathBuf,
+	start_line: usize,
+	end_line: usize,
+}
+
+fn git_toplevel() -> Result<std::path::PathBuf, Box<dyn Error>> {
+	let toplevel = ProcessCommand::new("git")
+		.args(["rev-parse", "--show-toplevel"])
+		.output()?;
+	if !toplevel.status.success() {
+		return Err("Failed to run `git rev-parse --show-toplevel`; are you in a git repo?".into());
+	}
+	let root = String::from_utf8_lossy(&toplevel.stdout);
+	let root = root.trim();
+	if root.is_empty() {
+		return Err("`git rev-parse --show-toplevel` returned empty output".into());
+	}
+	Ok(std::path::PathBuf::from(root))
+}
+
+fn git_diff_text(rev_spec: Option<&str>, staged: bool) -> Result<String, Box<dyn Error>> {
+	let mut cmd = ProcessCommand::new("git");
+	cmd.args(["diff", "--unified=0", "--no-color"]);
+	if staged {
+		cmd.arg("--cached");
+	}
+	if let Some(spec) = rev_spec {
+		cmd.arg(spec);
+	}
+	let output = cmd.output()?;
+	if !output.status.success() {
+		return Err("Failed to run `git diff --unified=0`".into());
+	}
+	Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool) -> Vec<DiffHunk> {
+	let mut current_file: Option<std::path::PathBuf> = None;
+	let mut hunks: Vec<DiffHunk> = Vec::new();
+
+	fn parse_usize_prefix(s: &str) -> Option<(usize, &str)> {
+		let mut end = 0usize;
+		for (idx, ch) in s.char_indices() {
+			if ch.is_ascii_digit() {
+				end = idx + ch.len_utf8();
+			} else {
+				break;
+			}
+		}
+		if end == 0 {
+			return None;
+		}
+		let num = s[..end].parse::<usize>().ok()?;
+		Some((num, &s[end..]))
+	}
+
+	for line in diff.lines() {
+		if let Some(rest) = line.strip_prefix("+++ ") {
+			let path = rest.trim();
+			if path == "/dev/null" {
+				current_file = None;
+				continue;
+			}
+			let rel = path.strip_prefix("b/").unwrap_or(path);
+			let abs = git_root.join(rel);
+			if only_rust {
+				if abs.extension().and_then(|e| e.to_str()) != Some("rs") {
+					current_file = None;
+					continue;
+				}
+			}
+			current_file = Some(abs);
+			continue;
+		}
+
+		if !line.starts_with("@@") {
+			continue;
+		}
+		let Some(ref file) = current_file else {
+			continue;
+		};
+
+		let plus_idx = line.find(" +").map(|i| i + 2).or_else(|| line.find('+').map(|i| i + 1));
+		let Some(plus_idx) = plus_idx else {
+			continue;
+		};
+		let after_plus = &line[plus_idx..];
+		let Some((start, rest)) = parse_usize_prefix(after_plus) else {
+			continue;
+		};
+		let (len, _rest) = if let Some(rest) = rest.strip_prefix(',') {
+			parse_usize_prefix(rest).unwrap_or((1, rest))
+		} else {
+			(1, rest)
+		};
+
+		let len = len.max(1);
+		let end = start.saturating_add(len - 1).max(start);
+		hunks.push(DiffHunk {
+			file: file.clone(),
+			start_line: start.max(1),
+			end_line: end.max(1),
+		});
+	}
+
+	// Preserve first-seen order but drop duplicates.
+	let mut seen = std::collections::BTreeSet::new();
+	hunks.retain(|h| seen.insert((h.file.clone(), h.start_line, h.end_line)));
+	hunks
+}
+
+fn find_package_root(file: &std::path::Path, git_root: &std::path::Path) -> Option<std::path::PathBuf> {
+	let mut cur = file.parent()?.to_path_buf();
+	loop {
+		if cur.join("Cargo.toml").exists() {
+			return Some(cur);
+		}
+		if cur == git_root {
+			return None;
+		}
+		if !cur.pop() {
+			return None;
+		}
+	}
+}
+
+fn resolve_changed_context(
+	hunks: &[DiffHunk],
+	rs: &Ripdoc,
+	common: &CommonArgs,
+) -> Result<(Vec<String>, Vec<String>), Box<dyn Error>> {
+	const CONTEXT_LINES: usize = 30;
+	const MAX_SNIPPET_LINES: usize = 220;
+	const MAX_ITEMS_PER_HUNK: usize = 6;
+	const NEAREST_ITEM_LIMIT: usize = 3;
+	const NEAREST_ITEM_MAX_DISTANCE: usize = 80;
+	const MAX_TARGETS: usize = 200;
+
+	let git_root = git_toplevel()?;
+
+	let mut targets: Vec<String> = Vec::new();
+	let mut raw_specs: Vec<String> = Vec::new();
+	let mut seen_targets = std::collections::BTreeSet::new();
+	let mut seen_raw = std::collections::BTreeSet::new();
+
+	let mut hunks_by_pkg: std::collections::HashMap<std::path::PathBuf, Vec<&DiffHunk>> =
+		std::collections::HashMap::new();
+	for hunk in hunks {
+		let Some(pkg_root) = find_package_root(&hunk.file, &git_root) else {
+			continue;
+		};
+		hunks_by_pkg.entry(pkg_root).or_default().push(hunk);
+	}
+
+	for (pkg_root, pkg_hunks) in hunks_by_pkg {
+		let pkg_root_str = pkg_root.display().to_string();
+		let resolved = resolve_target(&pkg_root_str, rs.offline());
+		let Ok(resolved) = resolved else {
+			continue;
+		};
+
+		for rt in resolved {
+			let crate_data = match rt.read_crate(
+				common.no_default_features,
+				common.all_features,
+				common.features.clone(),
+				true,
+				rs.silent(),
+				rs.cache_config(),
+			) {
+				Ok(data) => data,
+				Err(_) => continue,
+			};
+
+			let index = SearchIndex::build(&crate_data, true, Some(&pkg_root));
+
+			let resolve_span_path = |span: &rustdoc_types::Span| -> std::path::PathBuf {
+				let mut path = span.filename.clone();
+				if path.is_relative() {
+					let joined = pkg_root.join(&path);
+					if joined.exists() {
+						path = joined;
+					} else {
+						let mut components = span.filename.components();
+						while components.next().is_some() {
+							let candidate = pkg_root.join(components.as_path());
+							if candidate.exists() {
+								path = candidate;
+								break;
+							}
+						}
+					}
+				}
+				path.canonicalize().unwrap_or(path)
+			};
+
+			let mut entries_by_file: std::collections::HashMap<std::path::PathBuf, Vec<&ripdoc::core_api::search::SearchResult>> =
+				std::collections::HashMap::new();
+			for entry in index.entries() {
+				let Some(item) = crate_data.index.get(&entry.item_id) else {
+					continue;
+				};
+				let Some(span) = &item.span else {
+					continue;
+				};
+				let span_path = resolve_span_path(span);
+				entries_by_file.entry(span_path).or_default().push(entry);
+			}
+
+			for hunk in &pkg_hunks {
+				let file = hunk.file.canonicalize().unwrap_or_else(|_| hunk.file.clone());
+				let Some(entries) = entries_by_file.get(&file) else {
+					continue;
+				};
+
+				let range_start = hunk.start_line.saturating_sub(CONTEXT_LINES).max(1);
+				let range_end = hunk.end_line.saturating_add(CONTEXT_LINES).max(range_start);
+
+				let mut candidates: Vec<(usize, usize, String)> = Vec::new();
+				for entry in entries {
+					let Some(item) = crate_data.index.get(&entry.item_id) else {
+						continue;
+					};
+					let Some(span) = &item.span else {
+						continue;
+					};
+					let begin = span.begin.0 as usize;
+					let end = span.end.0 as usize;
+					if begin == 0 || end == 0 {
+						continue;
+					}
+
+					let overlaps = begin <= range_end && end >= range_start;
+					let distance = if overlaps {
+						0
+					} else if end < range_start {
+						range_start - end
+					} else if begin > range_end {
+						begin - range_end
+					} else {
+						0
+					};
+
+					let kind_priority = match entry.kind {
+						SearchItemKind::Method
+						| SearchItemKind::Function
+						| SearchItemKind::Struct
+						| SearchItemKind::Enum
+						| SearchItemKind::Trait
+						| SearchItemKind::TypeAlias => 0usize,
+						SearchItemKind::Module => 2usize,
+						_ => 3usize,
+					};
+
+					let spec = format!("{}::{}", pkg_root.display(), entry.path_string);
+					candidates.push((distance, kind_priority, spec));
+				}
+
+				candidates.sort_by_key(|(dist, pri, spec)| (*dist, *pri, spec.len()));
+
+				let mut added_for_hunk = 0usize;
+				for (dist, _pri, spec) in &candidates {
+					if *dist != 0 {
+						continue;
+					}
+					if targets.len() >= MAX_TARGETS {
+						break;
+					}
+					if seen_targets.insert(spec.clone()) {
+						targets.push(spec.clone());
+						added_for_hunk += 1;
+						if added_for_hunk >= MAX_ITEMS_PER_HUNK {
+							break;
+						}
+					}
+				}
+
+				if added_for_hunk == 0 {
+					let mut nearest_added = 0usize;
+					for (dist, _pri, spec) in &candidates {
+						if *dist == 0 || *dist > NEAREST_ITEM_MAX_DISTANCE {
+							continue;
+						}
+						if targets.len() >= MAX_TARGETS {
+							break;
+						}
+						if seen_targets.insert(spec.clone()) {
+							targets.push(spec.clone());
+							nearest_added += 1;
+							if nearest_added >= NEAREST_ITEM_LIMIT {
+								break;
+							}
+						}
+					}
+				}
+
+				let snippet_start = range_start;
+				let mut snippet_end = range_end;
+				let max_end = snippet_start.saturating_add(MAX_SNIPPET_LINES.saturating_sub(1));
+				if snippet_end > max_end {
+					snippet_end = max_end;
+				}
+				let spec = format!("{}:{}:{}", file.display(), snippet_start, snippet_end);
+				if seen_raw.insert(spec.clone()) {
+					raw_specs.push(spec);
+				}
+			}
+		}
+	}
+
+	Ok((targets, raw_specs))
+}
+
+#[cfg(test)]
+mod diff_tests {
+	use super::{parse_git_diff_hunks, DiffHunk};
+
+	#[test]
+	fn parse_git_diff_hunks_extracts_new_ranges() {
+		let diff = "diff --git a/src/lib.rs b/src/lib.rs\nindex 111..222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,2 +10,3 @@\n+added\n";
+		let root = std::path::PathBuf::from("/repo");
+		let hunks = parse_git_diff_hunks(diff, &root, true);
+		assert_eq!(hunks.len(), 1);
+		let DiffHunk { file, start_line, end_line } = &hunks[0];
+		assert!(file.ends_with("src/lib.rs"));
+		assert_eq!((*start_line, *end_line), (10, 12));
+	}
+}
+
 /// Print a skeleton to stdout.
 fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
 	let mut target = args.target.clone();
@@ -495,6 +871,17 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 
 		if response.results.is_empty() && response.rendered.is_empty() {
 			println!("No matches found for \"{}\".", trimmed);
+			if trimmed.contains("::") {
+				let last_segment = trimmed.rsplit("::").next().unwrap_or(trimmed);
+				println!(
+					"Tip: discover the exact rustdoc path with: ripdoc list {} --search \"{}\" --search-spec path --private",
+					target,
+					last_segment
+				);
+				println!(
+					"Tip: if the code isn't in rustdoc output, use `ripdoc skelebuild add-file <path>` or `ripdoc skelebuild add-raw <path[:start[:end]]>` to include raw source."
+				);
+			}
 			return Ok(());
 		}
 
@@ -551,7 +938,12 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 			return Ok(());
 		}
 		trimmed_query = Some(trimmed.to_string());
-		search_options = Some(build_search_options(common, &args.filters, trimmed));
+		let mut options = build_search_options(common, &args.filters, trimmed);
+		// Heuristic: queries that look like `crate::module::Item` are usually path searches.
+		if trimmed.contains("::") && !options.domains.contains(SearchDomain::PATHS) {
+			options.domains |= SearchDomain::PATHS;
+		}
+		search_options = Some(options);
 	}
 
 	let listings = rs.list(
@@ -568,6 +960,15 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 			println!("No matches found for \"{query}\".");
 			if !common.private {
 				println!("Tip: pass `--private` to include private items.");
+			}
+			if query.contains("::")
+				&& !args
+					.filters
+					.search_spec
+					.iter()
+					.any(|spec| matches!(spec, SearchSpec::Path))
+			{
+				println!("Tip: pass `--search-spec path` to search canonical item paths.");
 			}
 		} else {
 			println!("No items found.");
@@ -864,8 +1265,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			run_list(&args.common, &args, &rs)
 		}
 		Command::Readme(args) => run_readme(&args.common, &args),
-		Command::Agents => {
-			print!("{}", include_str!("agents_ripdoc.md"));
+		Command::Agents(args) => {
+			match args.topic {
+				None => print!("{}", include_str!("agents_ripdoc.md")),
+				Some(AgentsTopic::Skelebuild) => {
+					print!("{}", include_str!("skelebuild/agents_skelebuild.md"))
+				}
+			}
 			Ok(())
 		}
 		Command::Skelebuild(args) => {
@@ -932,6 +1338,37 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						output = o;
 					}
 					Some(SkeleAction::AddRaw { spec })
+				}
+				SkelebuildSubcommand::AddFile { file, output: o } => {
+					if o.is_some() {
+						output = o;
+					}
+					Some(SkeleAction::AddRaw {
+						spec: file.display().to_string(),
+					})
+				}
+				SkelebuildSubcommand::AddChanged {
+					git,
+					staged,
+					only_rust,
+					output: o,
+				} => {
+					if o.is_some() {
+						output = o;
+					}
+					let git_root = git_toplevel()?;
+					let diff = git_diff_text(git.as_deref(), staged)?;
+					let hunks = parse_git_diff_hunks(&diff, &git_root, only_rust);
+					if hunks.is_empty() {
+						println!("No changed hunks found.");
+						return Ok(());
+					}
+					let (targets, raw_specs) = resolve_changed_context(&hunks, &rs, &args.common)?;
+					if targets.is_empty() && raw_specs.is_empty() {
+						println!("No changed context could be resolved.");
+						return Ok(());
+					}
+					Some(SkeleAction::AddChangedResolved { targets, raw_specs })
 				}
 				SkelebuildSubcommand::Update {
 

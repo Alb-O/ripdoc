@@ -27,4 +27,4 @@
 
 - Stateful builder: `ripdoc skelebuild add <target> [ITEM] [--implementation|--raw-source]`
   - For local projects, use a path target: `ripdoc skelebuild add ./path/to/crate crate::Item`.
-- For more detailed usage of `skelebuild`, see `ripdoc skelebuild agents`
+- For more detailed usage of `skelebuild`, see `ripdoc skelebuild agents` (or `ripdoc agents skelebuild`).
