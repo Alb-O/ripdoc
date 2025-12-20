@@ -211,6 +211,10 @@ enum SkelebuildSubcommand {
 		#[arg(short = 's', long, alias = "source", default_value_t = false)]
 		raw_source: bool,
 
+		/// Disable validation (allows adding even if it won't resolve until later).
+		#[arg(long = "no-validate", default_value_t = false)]
+		no_validate: bool,
+
 		/// Output file for the skeleton.
 		#[arg(short = 'O', long)]
 		output: Option<std::path::PathBuf>,
@@ -842,6 +846,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						item,
 						implementation,
 						raw_source,
+						no_validate,
 						output: o,
 						plain: p,
 					} => {
@@ -856,10 +861,12 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						} else {
 							target
 						};
+						let validate = !no_validate;
 						Some(SkeleAction::Add {
 							target,
 							implementation,
 							raw_source,
+							validate,
 						})
 					}
 					SkelebuildSubcommand::Update {

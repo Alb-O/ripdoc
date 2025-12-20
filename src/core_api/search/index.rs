@@ -23,10 +23,46 @@ impl<'a> SearchIndex<'a> {
 	pub fn build(crate_data: &'a Crate, include_private: bool, source_root: Option<&Path>) -> Self {
 		let mut builder = IndexBuilder::new(crate_data, include_private, source_root);
 		builder.traverse();
-		let entries = builder.finish_entries();
+		let mut entries = builder.finish_entries();
+
+		// Add alias entries for public re-exports (`pub use foo::Bar;`) so that path-search
+		// can resolve via the public API surface.
+		let mut id_to_first = HashMap::with_capacity(entries.len());
+		for (idx, entry) in entries.iter().enumerate() {
+			id_to_first.entry(entry.item_id).or_insert(idx);
+		}
+
+		let mut aliases: Vec<SearchResult> = Vec::new();
+		for use_entry in entries.iter().filter(|e| e.kind == SearchItemKind::Use) {
+			let Some(use_item) = crate_data.index.get(&use_entry.item_id) else {
+				continue;
+			};
+			if !matches!(use_item.visibility, Visibility::Public | Visibility::Default) {
+				continue;
+			}
+			let ItemEnum::Use(import) = &use_item.inner else {
+				continue;
+			};
+			let Some(imported_id) = import.id.as_ref() else {
+				continue;
+			};
+			let Some(&imported_idx) = id_to_first.get(imported_id) else {
+				continue;
+			};
+
+			let mut alias = entries[imported_idx].clone();
+			alias.path = use_entry.path.clone();
+			alias.path_string = use_entry.path_string.clone();
+			alias.raw_name = use_entry.raw_name.clone();
+			alias.display_name = use_entry.display_name.clone();
+			alias.clear_match_info();
+			aliases.push(alias);
+		}
+		entries.extend(aliases);
+
 		let mut id_to_entry = HashMap::with_capacity(entries.len());
 		for (idx, entry) in entries.iter().enumerate() {
-			id_to_entry.insert(entry.item_id, idx);
+			id_to_entry.entry(entry.item_id).or_insert(idx);
 		}
 		Self {
 			crate_data,
@@ -324,7 +360,7 @@ impl<'a> IndexBuilder<'a> {
 			ItemEnum::Macro(_) => self.record_simple(item, SearchItemKind::Macro),
 			ItemEnum::ProcMacro(_) => self.record_simple(item, SearchItemKind::ProcMacro),
 			ItemEnum::TraitAlias(_) => self.record_simple(item, SearchItemKind::TraitAlias),
-			ItemEnum::Use(_) => self.record_simple(item, SearchItemKind::Use),
+			ItemEnum::Use(import) => self.record_use(item, import),
 			ItemEnum::Primitive(_) => self.record_simple(item, SearchItemKind::Primitive),
 			ItemEnum::Variant(variant) => self.visit_variant(item, variant),
 			ItemEnum::StructField(_) => self.record_simple(item, SearchItemKind::Field),
@@ -652,6 +688,21 @@ impl<'a> IndexBuilder<'a> {
 	fn record_simple(&mut self, item: &Item, kind: SearchItemKind) {
 		let segment = self.make_segment(item, kind, None);
 		self.record_item(item, kind, &segment, false, &[]);
+	}
+
+	fn record_use(&mut self, item: &Item, import: &rustdoc_types::Use) {
+		let raw_name = if item.name.is_some() {
+			item.name.clone().unwrap()
+		} else {
+			import.name.clone()
+		};
+		let segment = SearchPathSegment {
+			name: raw_name.clone(),
+			display_name: raw_name,
+			kind: SearchItemKind::Use,
+			is_public: matches!(item.visibility, Visibility::Public | Visibility::Default),
+		};
+		self.record_item(item, SearchItemKind::Use, &segment, false, &[]);
 	}
 
 	fn make_segment(

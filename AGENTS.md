@@ -27,7 +27,9 @@
 
 - Stateful builder: `ripdoc skelebuild add <target> [ITEM] [--implementation|--raw-source]`
   - For local projects, use a path target: `ripdoc skelebuild add ./path/to/crate crate::Item`.
+  - Validates by default; pass `--no-validate` to skip validation.
 - Update flags: `ripdoc skelebuild update <spec> [--implementation|--no-implementation] [--raw-source|--no-raw-source]`
+- Impl-block targeting: `ripdoc skelebuild add ./path/to/crate Type::Trait`
 - Interleave notes: `ripdoc skelebuild inject '...markdown...' --after-target <spec>` (or `--before-target`; `--at <index>` is precise but indices shift)
 - Markdown spacing: if you inject lists/callouts, end with a blank line so the next `### Source: ...` header stays readable.
 - Source spans: ripdoc resolves relative span paths against the target crate root.

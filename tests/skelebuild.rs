@@ -81,7 +81,7 @@ fn main() {}
 	temp_dir
 }
 
-fn find_save_paths(crate_dir: &PathBuf) -> (String, String) {
+fn find_inherent_save_path(crate_dir: &PathBuf) -> String {
 	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
 	let crates = ripdoc
 		.inspect(
@@ -102,7 +102,6 @@ fn find_save_paths(crate_dir: &PathBuf) -> (String, String) {
 	let results = index.search(&options);
 
 	let mut inherent: Option<String> = None;
-	let mut trait_impl: Option<String> = None;
 	let mut candidates: Vec<String> = Vec::new();
 
 	for result in results {
@@ -115,11 +114,6 @@ fn find_save_paths(crate_dir: &PathBuf) -> (String, String) {
 
 		candidates.push(result.path_string.clone());
 
-		// In this index, impl methods for trait impls tend to include the trait segment in the path.
-		if result.path_string.contains("EditorOps") {
-			trait_impl.get_or_insert(result.path_string);
-			continue;
-		}
 
 		// Inherent methods are typically `crate::Type::method`.
 		if result.path_string.contains("::Editor::save") {
@@ -133,14 +127,8 @@ fn find_save_paths(crate_dir: &PathBuf) -> (String, String) {
 			candidates
 		)
 	});
-	let trait_impl = trait_impl.unwrap_or_else(|| {
-		panic!(
-			"failed to find trait impl save path; candidates: {:?}",
-			candidates
-		)
-	});
 
-	(inherent, trait_impl)
+	inherent
 }
 
 #[test]
@@ -151,7 +139,7 @@ fn skelebuild_realistic_session_produces_detailed_markdown() -> Result<(), Box<d
 	let out_dir = TempDir::new()?;
 	let out_path = out_dir.path().join("out.md");
 
-	let (inherent_save, trait_save) = find_save_paths(&crate_dir);
+	let inherent_save = find_inherent_save_path(&crate_dir);
 
 	let mut state = SkeleState::default();
 	state.output_path = Some(out_path.clone());
@@ -178,9 +166,10 @@ fn skelebuild_realistic_session_produces_detailed_markdown() -> Result<(), Box<d
 			implementation: true,
 			raw_source: false,
 		}),
+		// Target an entire impl block via `Type::Trait`.
 		SkeleEntry::Target(SkeleTarget {
-			path: format!("{}::{trait_save}", crate_dir.display()),
-			implementation: true,
+			path: format!("{}::editor::Editor::EditorOps", crate_dir.display()),
+			implementation: false,
 			raw_source: false,
 		}),
 	];

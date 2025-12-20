@@ -38,7 +38,9 @@ ripdoc skelebuild rebuild
 - Prefer `inject --after-target <spec>` / `--before-target <spec>`; `--at <index>` works, but indices shift as you insert.
 - `status` is read-only (it won’t rewrite your output file); pass `--show-state` to print the full state after other commands.
 - `--implementation` includes method/function bodies when available; for containers it will also pull in relevant `impl` blocks when possible.
-- If a target can’t be resolved or a source file can’t be read, rebuild writes a visible Markdown warning block (`> [!ERROR] ...`) so missing code isn’t silent.
+- Impl-block targeting: you can target an entire impl block with `Type::Trait` (e.g. `Editor::EditorOps`).
+- Validation: `skelebuild add` validates targets by default and fails early; pass `--no-validate` to record an entry without validating it.
+- Errors/warnings are printed to stderr and are not embedded into the generated Markdown output (keeps the output doc clean).
 - Source path resolution is crate-root aware: relative spans like `src/main.rs` are resolved against the target crate, not your current working directory.
 - Markdown interleaving: `skelebuild` inserts blank lines between blocks, but if you inject an unterminated list/callout, add a trailing blank line so the next `### Source: ...` header doesn’t get “captured” by Markdown formatting.
 - Fix typos / toggle flags: use `skelebuild update <spec> [--implementation|--no-implementation] [--raw-source|--no-raw-source]`.
