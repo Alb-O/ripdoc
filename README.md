@@ -2,7 +2,46 @@
 
 Ripdoc prints a syntactical outline of a crate's public API and documentation. The CLI provides on-demand access to these resources from any source (local filesystem or through [crates.io](https://crates.io)), perfect for AI agent usage.
 
-See [AGENTS.md](./AGENTS.md) for an example of context & usage to provide to AI agents. There is no MCP server for this tool, as I think MCP is a garbage spec and on it's way out soon as hinted by Anthropic themselves.
+## For AI Agents
+
+Ripdoc is built to be the "eyes" of an AI agent in a Rust codebase.
+
+- `print` and `list` subcommands explores and prints crate API (local or from crates.io), searches/filters, and provides agent-consumable markdown-formatted context.
+- `readme` subcommand prints just the contents of a crate's README.
+- `skelebuild` is a statefule, semi-interactive mode for constructing "source maps" for local crates that you or your agents are developing. The tool builds an output markdown file intelligently, inserting slices of contextual rust code in a correct, syntax-aware order and nesting. Agents can interleave API skeletons, implementation spans, and general markdown commentary to explain code and architecture for the next agent in the loop (or the user, if you care enough).
+
+For a dense techincal guide specifically for agent consumption:
+- `ripdoc agents` (general usage)
+- `ripdoc skelebuild agents` (skelebuild specific)
+
+There is no MCP server for this tool. Long live skills!
+
+## Skelebuild ("Hand-off" Mode)
+
+`skelebuild` is a stateful workflow for constructing a "source map" markdown file that interleaves:
+
+- Rendered API skeletons (and optionally implementation spans)
+- Full raw source for specific files when needed
+- Commentary/instructions between sections
+
+Minimal workflow:
+
+```sh
+# Start fresh and choose an output file
+ripdoc skelebuild reset --output source_map.md
+
+# Add a few key items (prefer paths from `ripdoc list ... --search ... --search-spec path`)
+ripdoc skelebuild add ./path/to/crate crate::module::Type
+ripdoc skelebuild add ./path/to/crate crate::module::Type::method --implementation
+
+# Add instructions/notes near a specific target
+ripdoc skelebuild inject '## Notes\nInvestigate error handling here.' --after-target crate::module::Type
+
+# Rebuild explicitly (most commands rebuild automatically)
+ripdoc skelebuild rebuild
+```
+
+The state is stored at `~/.local/state/ripdoc/skelebuild.json` so you can incrementally refine the source map across runs.
 
 ## Search Mode
 

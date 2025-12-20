@@ -194,6 +194,8 @@ struct SkelebuildArgs {
 
 #[derive(Subcommand, Clone)]
 enum SkelebuildSubcommand {
+	/// Print the `skelebuild` agent guide.
+	Agents,
 	/// Add a target to the skeleton.
 	Add {
 		/// Target to add.
@@ -310,6 +312,8 @@ enum Command {
 	Raw(PrintArgs),
 	/// Fetch and print the README of the target crate.
 	Readme(ReadmeArgs),
+	/// Print a dense guide for AI agents.
+	Agents,
 	/// Build a skeleton incrementally.
 	Skelebuild(SkelebuildArgs),
 }
@@ -834,6 +838,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			run_list(&args.common, &args, &rs)
 		}
 		Command::Readme(args) => run_readme(&args.common, &args),
+		Command::Agents => {
+			print!("{}", include_str!("agents_ripdoc.md"));
+			Ok(())
+		}
 		Command::Skelebuild(args) => {
 			use ripdoc::skelebuild::SkeleAction;
 			let rs = build_ripdoc(&args.common);
@@ -845,6 +853,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				Some(SkeleAction::Reset)
 			} else if let Some(cmd) = args.command {
 				match cmd {
+					SkelebuildSubcommand::Agents => {
+						print!("{}", include_str!("skelebuild/agents_skelebuild.md"));
+						return Ok(());
+					}
 					SkelebuildSubcommand::Add {
 						target,
 						item,

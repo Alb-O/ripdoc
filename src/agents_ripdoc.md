@@ -1,4 +1,4 @@
-# ripdoc quick notes
+# Ripdoc
 
 - Usage: `ripdoc <COMMAND> [TARGET] [OPTIONS]`
 - Targets: crates.io names (`serde`), `name@version`, or local paths (`./path/to/crate`).
@@ -27,12 +27,4 @@
 
 - Stateful builder: `ripdoc skelebuild add <target> [ITEM] [--implementation|--raw-source]`
   - For local projects, use a path target: `ripdoc skelebuild add ./path/to/crate crate::Item`.
-  - Validates by default; pass `--no-validate` to skip validation.
-- Update flags: `ripdoc skelebuild update <spec> [--implementation|--no-implementation] [--raw-source|--no-raw-source]`
-- Impl-block targeting: `ripdoc skelebuild add ./path/to/crate Type::Trait`
-- Interleave notes: `ripdoc skelebuild inject '...markdown...' --after-target <spec>` (or `--before-target`; `--at <index>` is precise but indices shift)
-  - `inject` unescapes `\n` by default; pass `--literal` to keep backslashes.
-- Markdown spacing: if you inject lists/callouts, end with a blank line so the next `### Source: ...` header stays readable.
-- Source spans: ripdoc resolves relative span paths against the target crate root.
-- Manage state: `status` (read-only, verbose), `rebuild` (rewrites output), `remove`, `reset` (most commands print a one-line summary; use `skelebuild --show-state ...` to print full state)
-- State file: `~/.local/state/ripdoc/skelebuild.json`
+- For more detailed usage of `skelebuild`, see `ripdoc skelebuild agents`
