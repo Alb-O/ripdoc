@@ -281,7 +281,15 @@ impl ResolvedTarget {
 			}
 		}
 
-		Self::from_registry_crate(name, None, path, offline)
+		Self::from_registry_crate(name, None, path, offline).map_err(|err| {
+			if CargoPath::nearest_manifest(&current_dir).is_some() {
+				err
+			} else {
+				RipdocError::InvalidTarget(format!(
+					"{err}\n\nHint: if this is a local crate, run ripdoc from the workspace/package directory (so it can discover workspace members), or pass an explicit path first (e.g. `ripdoc skelebuild add ./path/to/crate crate::Item`).",
+				))
+			}
+		})
 	}
 }
 

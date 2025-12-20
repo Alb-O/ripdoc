@@ -217,7 +217,11 @@ impl Renderer {
 		match self.formatter.format_str(raw_output) {
 			Ok(formatted) => Ok(self.apply_postprocessors(formatted)),
 			Err(e) => {
-				eprintln!("Warning: An error occurred while formatting the source code: {e}");
+				// Formatting failures are expected when rendering partial snippets.
+				// Only emit a warning if explicitly requested.
+				if std::env::var_os("RIPDOC_RUSTFMT_WARN").is_some() {
+					eprintln!("Warning: An error occurred while formatting the source code: {e}");
+				}
 				Ok(self.apply_postprocessors(raw_output.to_string()))
 			}
 		}

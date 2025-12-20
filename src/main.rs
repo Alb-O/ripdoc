@@ -219,6 +219,29 @@ enum SkelebuildSubcommand {
 		#[arg(long)]
 		plain: bool,
 	},
+	/// Update an existing target entry.
+	Update {
+		/// Target spec to update (matches like `inject --after-target`).
+		spec: String,
+
+		/// Enable implementation extraction for this entry.
+		#[arg(long, conflicts_with = "no_implementation")]
+		implementation: bool,
+		/// Disable implementation extraction for this entry.
+		#[arg(long = "no-implementation", conflicts_with = "implementation")]
+		no_implementation: bool,
+
+		/// Enable raw-source inclusion for this entry.
+		#[arg(long, conflicts_with = "no_raw_source")]
+		raw_source: bool,
+		/// Disable raw-source inclusion for this entry.
+		#[arg(long = "no-raw-source", conflicts_with = "raw_source")]
+		no_raw_source: bool,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
+	},
 	/// Inject manual commentary.
 	Inject {
 		/// Text to inject.
@@ -837,6 +860,37 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							target,
 							implementation,
 							raw_source,
+						})
+					}
+					SkelebuildSubcommand::Update {
+						spec,
+						implementation,
+						no_implementation,
+						raw_source,
+						no_raw_source,
+						output: o,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						let impl_value = if implementation {
+							Some(true)
+						} else if no_implementation {
+							Some(false)
+						} else {
+							None
+						};
+						let raw_value = if raw_source {
+							Some(true)
+						} else if no_raw_source {
+							Some(false)
+						} else {
+							None
+						};
+						Some(SkeleAction::Update {
+							spec,
+							implementation: impl_value,
+							raw_source: raw_value,
 						})
 					}
 					SkelebuildSubcommand::Inject {

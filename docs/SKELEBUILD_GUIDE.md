@@ -23,6 +23,9 @@ ripdoc skelebuild inject '## Notes\nWhy this matters...' --after-target bat::con
 # Show indices / full state when needed
 ripdoc skelebuild status
 
+# Toggle flags on an existing entry
+ripdoc skelebuild update bat::config::Config --implementation
+
 # Remove entries by exact target/content
 ripdoc skelebuild remove bat::assets::get_acknowledgements
 
@@ -38,6 +41,20 @@ ripdoc skelebuild rebuild
 - If a target can’t be resolved or a source file can’t be read, rebuild writes a visible Markdown warning block (`> [!ERROR] ...`) so missing code isn’t silent.
 - Source path resolution is crate-root aware: relative spans like `src/main.rs` are resolved against the target crate, not your current working directory.
 - Markdown interleaving: `skelebuild` inserts blank lines between blocks, but if you inject an unterminated list/callout, add a trailing blank line so the next `### Source: ...` header doesn’t get “captured” by Markdown formatting.
+- Fix typos / toggle flags: use `skelebuild update <spec> [--implementation|--no-implementation] [--raw-source|--no-raw-source]`.
+
+## Local crates vs crates.io
+
+When you pass a bare crate name (e.g. `serde` or `tome_core`), ripdoc treats it as a *named target*. Resolution depends on where you run it:
+
+- From inside a Cargo workspace/package: ripdoc can resolve workspace members and dependencies by name.
+- Outside any Cargo workspace/package: ripdoc will try crates.io / local cache.
+
+If you meant a local crate and you’re not running from its workspace root, pass a filesystem path as the first argument:
+
+```bash
+ripdoc skelebuild add ./path/to/crate crate::module::Item
+```
 
 ## Finding the right item path
 

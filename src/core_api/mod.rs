@@ -168,6 +168,21 @@ impl Ripdoc {
 		self.render_source_labels
 	}
 
+	/// Returns whether ripdoc is running in offline mode.
+	pub fn offline(&self) -> bool {
+		self.offline
+	}
+
+	/// Returns whether ripdoc is running in silent mode.
+	pub fn silent(&self) -> bool {
+		self.silent
+	}
+
+	/// Returns the active cache configuration.
+	pub fn cache_config(&self) -> &super::cargo_utils::CacheConfig {
+		&self.cache_config
+	}
+
 	/// Returns the parsed representation of the crate's API.
 	///
 	/// # Arguments

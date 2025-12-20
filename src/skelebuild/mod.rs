@@ -53,6 +53,57 @@ fn normalize_target_spec_for_storage(target: &str) -> String {
 	}
 }
 
+fn validate_add_target_best_effort(target_spec: &str, ripdoc: &Ripdoc) -> Option<String> {
+	let parsed = crate::cargo_utils::target::Target::parse(target_spec).ok()?;
+	let crate::cargo_utils::target::Entrypoint::Path(_) = parsed.entrypoint else {
+		return None;
+	};
+	if parsed.path.is_empty() {
+		return None;
+	}
+	let base_query = parsed.path.join("::");
+
+	let resolved = resolve_target(target_spec, ripdoc.offline()).ok()?;
+	let rt = resolved.first()?;
+	let pkg_root = rt.package_root().to_path_buf();
+	let crate_data = rt
+		.read_crate(
+			false,
+			false,
+			vec![],
+			true,
+			ripdoc.silent(),
+			ripdoc.cache_config(),
+		)
+		.ok()?;
+	let index = SearchIndex::build(&crate_data, true, Some(&pkg_root));
+
+	let mut options = SearchOptions::new(&base_query);
+	options.domains = SearchDomain::PATHS;
+	let mut results = index.search(&options);
+	if base_query.contains("::") {
+		results.retain(|r| {
+			r.path_string == base_query || r.path_string.ends_with(&format!("::{base_query}"))
+		});
+	}
+
+	if results.is_empty() {
+		return Some(format!(
+			"Added target, but no path match found for `{base_query}` in `{}`. Tip: run `ripdoc list {}` with `--search ... --search-spec path` and use the exact path.",
+			pkg_root.display(),
+			pkg_root.display(),
+		));
+	}
+	if results.len() > 1 {
+		return Some(format!(
+			"Added target, but `{base_query}` matched multiple items; rebuild will pick one. Tip: run `ripdoc list {}` and use the exact path.",
+			pkg_root.display(),
+		));
+	}
+
+	None
+}
+
 fn target_entry_matches_spec(stored_target: &str, spec: &str) -> bool {
 	let spec = spec.trim();
 	if spec.is_empty() {
@@ -172,7 +223,7 @@ impl SkeleState {
 	}
 
 	/// Rebuilds the skeleton file from scratch using all stored entries.
-	pub fn rebuild(&self, _ripdoc: &Ripdoc) -> Result<()> {
+	pub fn rebuild(&self, ripdoc: &Ripdoc) -> Result<()> {
 		let output_path = self
 			.output_path
 			.clone()
@@ -186,7 +237,7 @@ impl SkeleState {
 		for entry in &self.entries {
 			match entry {
 				SkeleEntry::Target(t) => {
-					let resolved = match resolve_target(&t.path, false) {
+					let resolved = match resolve_target(&t.path, ripdoc.offline()) {
 						Ok(r) => r,
 						Err(err) => {
 							grouped_entries.push(SkeleGroup::Injection(format!(
@@ -204,8 +255,8 @@ impl SkeleState {
 										false,
 										vec![],
 										true,
-										true,
-										&crate::cargo_utils::CacheConfig::default(),
+										ripdoc.silent(),
+										ripdoc.cache_config(),
 									) {
 										Ok(data) => {
 											crates_data.insert(pkg_root.clone(), data);
@@ -551,6 +602,15 @@ pub enum SkeleAction {
 		/// Optional numeric index (0-based) to insert at.
 		at: Option<usize>,
 	},
+	/// Update an existing target entry.
+	Update {
+		/// Target spec to update (matches like `--after-target`).
+		spec: String,
+		/// New implementation flag, if provided.
+		implementation: Option<bool>,
+		/// New raw_source flag, if provided.
+		raw_source: Option<bool>,
+	},
 	/// Remove an entry.
 	Remove(String),
 	/// Reset state.
@@ -614,6 +674,9 @@ pub fn run_skelebuild(
 					if implementation { "yes" } else { "no" },
 					if raw_source { "yes" } else { "no" }
 				);
+				if let Some(message) = validate_add_target_best_effort(&normalized_target, ripdoc) {
+					eprintln!("Warning: {message}");
+				}
 			}
 		}
 		Some(SkeleAction::Inject {
@@ -689,6 +752,35 @@ pub fn run_skelebuild(
 				state.entries.push(injection);
 				println!("Injected commentary at end.");
 			}
+		}
+		Some(SkeleAction::Update {
+			spec,
+			implementation,
+			raw_source,
+		}) => {
+			should_rebuild = true;
+			let index = find_target_match(&state.entries, &spec)?;
+			let entry = state
+				.entries
+				.get_mut(index)
+				.ok_or_else(|| RipdocError::InvalidTarget(format!("Invalid entry index {index}")))?;
+			let SkeleEntry::Target(target) = entry else {
+				return Err(RipdocError::InvalidTarget(format!(
+					"Entry #{index} matched '{spec}' but is not a target",
+				)));
+			};
+			if let Some(value) = implementation {
+				target.implementation = value;
+			}
+			if let Some(value) = raw_source {
+				target.raw_source = value;
+			}
+			println!(
+				"Updated target: {} (implementation: {}, raw_source: {})",
+				target.path,
+				if target.implementation { "yes" } else { "no" },
+				if target.raw_source { "yes" } else { "no" }
+			);
 		}
 		Some(SkeleAction::Remove(target_str)) => {
 			should_rebuild = true;
