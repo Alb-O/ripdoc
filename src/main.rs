@@ -1,6 +1,7 @@
 //! CLI entrypoint.
 
 use std::error::Error;
+use std::io::IsTerminal;
 use std::process::{self, Command as ProcessCommand, Stdio};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -71,6 +72,10 @@ struct CommonArgs {
 	/// Do not inject source filename labels in the output
 	#[arg(long, default_value_t = false)]
 	no_source_labels: bool,
+
+	/// Disable ANSI colors in CLI output
+	#[arg(long, default_value_t = false)]
+	no_color: bool,
 }
 
 #[derive(Args, Clone)]
@@ -126,6 +131,10 @@ struct PrintArgs {
 	/// Target to generate - a directory, file path, or a module name
 	#[arg(default_value = "./")]
 	target: String,
+
+	/// Optional item path to print (uses path-search mode).
+	#[arg(value_name = "ITEM", conflicts_with = "search")]
+	item: Option<String>,
 
 	/// Search query used to filter the printed skeleton
 	#[arg(short = 's', long)]
@@ -185,6 +194,10 @@ enum SkelebuildSubcommand {
 	Add {
 		/// Target to add.
 		target: String,
+
+		/// Optional item path to add (uses path-search mode).
+		#[arg(value_name = "ITEM")]
+		item: Option<String>,
 
 		/// Include the elided source implementation for this item.
 		#[arg(long, default_value_t = false)]
@@ -355,19 +368,56 @@ fn build_search_options(
 }
 
 /// Print a skeleton to stdout.
+fn split_path_target_spec(value: &str) -> Option<(String, String)> {
+	let split_at = value.find("::")?;
+	let (left, right_with_sep) = value.split_at(split_at);
+	let right = right_with_sep.strip_prefix("::")?;
+	let left = left.trim();
+	let right = right.trim();
+	if left.is_empty() || right.is_empty() {
+		return None;
+	}
+
+	let looks_like_path = left.contains('/') || left.contains('\\') || left.starts_with('.') || left.starts_with('/');
+	if looks_like_path || std::path::Path::new(left).exists() {
+		Some((left.to_string(), right.to_string()))
+	} else {
+		None
+	}
+}
+
+/// Print a skeleton to stdout.
 fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
-	// If search query is provided, use search mode
-	if let Some(query) = &args.search {
+	let mut target = args.target.clone();
+	let mut item_query = args.item.clone();
+
+	if args.search.is_none() && item_query.is_none() {
+		if let Some((split_target, split_query)) = split_path_target_spec(&args.target) {
+			target = split_target;
+			item_query = Some(split_query);
+		}
+	}
+
+	let explicit_search = args.search.as_deref();
+	let implicit_search = item_query.as_deref();
+	let query = explicit_search.or(implicit_search);
+
+	// If search query is provided, use search mode.
+	if let Some(query) = query {
 		let trimmed = query.trim();
 		if trimmed.is_empty() {
 			println!("Search query is empty; nothing to do.");
 			return Ok(());
 		}
 
-		let options = build_search_options(common, &args.filters, trimmed);
+		let mut options = build_search_options(common, &args.filters, trimmed);
+		if args.search.is_none() {
+			// Positional item mode: always treat as a path query.
+			options.domains = SearchDomain::PATHS;
+		}
 
 		let response = rs.search(
-			&args.target,
+			&target,
 			common.no_default_features,
 			common.all_features,
 			common.features.clone(),
@@ -381,27 +431,28 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 			return Ok(());
 		}
 
-		let output = highlight_matches(
-			&response.rendered,
-			trimmed,
-			args.filters.search_case_sensitive,
-		);
+		let output = if should_color_output(common) {
+			highlight_matches(&response.rendered, trimmed, args.filters.search_case_sensitive)
+		} else {
+			response.rendered
+		};
 
 		print!("{}", output);
-	} else {
-		// Normal print mode
-		let output = rs.render(
-			&args.target,
-			common.no_default_features,
-			common.all_features,
-			common.features.clone(),
-			common.private,
-			args.implementation,
-			args.raw_source,
-		)?;
-
-		println!("{output}");
+		return Ok(());
 	}
+
+	// Normal print mode
+	let output = rs.render(
+		&target,
+		common.no_default_features,
+		common.all_features,
+		common.features.clone(),
+		common.private,
+		args.implementation,
+		args.raw_source,
+	)?;
+
+	println!("{output}");
 
 	Ok(())
 }
@@ -483,7 +534,11 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 			path = entry.path
 		);
 		let highlighted_line = if let Some(ref query) = trimmed_query {
-			highlight_matches(&line, query, args.filters.search_case_sensitive)
+			if should_color_output(common) {
+				highlight_matches(&line, query, args.filters.search_case_sensitive)
+			} else {
+				line
+			}
 		} else {
 			line
 		};
@@ -601,6 +656,19 @@ fn run_readme(common: &CommonArgs, args: &ReadmeArgs) -> Result<(), Box<dyn Erro
 	}
 }
 
+fn should_color_output(common: &CommonArgs) -> bool {
+	if common.no_color {
+		return false;
+	}
+	if std::env::var_os("NO_COLOR").is_some() {
+		return false;
+	}
+	if std::env::var("TERM").ok().as_deref() == Some("dumb") {
+		return false;
+	}
+	std::io::stdout().is_terminal()
+}
+
 /// Highlight all occurrences of the search query in the given text.
 ///
 /// Queries containing pipe characters are treated as OR patterns and use regex highlighting.
@@ -708,6 +776,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			run_print(&args.common, &args, &rs)
 		}
 		Command::Raw(args) => {
+			if args.item.is_some()
+				|| args.search.is_some()
+				|| args.implementation
+				|| args.raw_source
+			{
+				return Err("`ripdoc raw` only accepts a target (no item/search/source flags).".into());
+			}
 			let rs = build_ripdoc(&args.common);
 			run_raw(&args.common, &args.target, &rs)
 		}
@@ -729,6 +804,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				match cmd {
 					SkelebuildSubcommand::Add {
 						target,
+						item,
 						implementation,
 						raw_source,
 						output: o,
@@ -740,6 +816,11 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						if p {
 							plain = p;
 						}
+						let target = if let Some(item) = item {
+							format!("{target}::{item}")
+						} else {
+							target
+						};
 						Some(SkeleAction::Add {
 							target,
 							implementation,
@@ -773,7 +854,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						Some(SkeleAction::Reset)
 					}
 					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
-					SkelebuildSubcommand::Rebuild => Some(SkeleAction::Status),
+					SkelebuildSubcommand::Rebuild => Some(SkeleAction::Rebuild),
 				}
 			} else {
 				None

@@ -141,8 +141,10 @@ pub fn extract_source(
 	let file_content = match std::fs::read_to_string(&path) {
 		Ok(content) => content,
 		Err(e) => {
-			eprintln!("Warning: Failed to read source file {}: {}", path.display(), e);
-			return Err(e);
+			return Ok(format!(
+				"// ripdoc:error: failed to read source file {}: {e}",
+				path.display()
+			));
 		}
 	};
 	let lines: Vec<&str> = file_content.lines().collect();

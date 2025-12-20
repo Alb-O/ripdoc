@@ -49,6 +49,17 @@ impl TargetResolution {
 	fn plan(target: Target) -> Result<Self> {
 		match target.entrypoint {
 			Entrypoint::Path(path) => {
+				let path = if path.is_relative() {
+					std::path::absolute(&path).map_err(|err| {
+						RipdocError::InvalidTarget(format!(
+							"Failed to resolve target path '{}': {err}",
+							path.display()
+						))
+					})?
+				} else {
+					path
+				};
+
 				if path.is_file() && path.extension().is_some_and(|ext| ext == "rs") {
 					return Ok(Self::FileModule {
 						file: path,

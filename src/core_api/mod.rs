@@ -282,6 +282,7 @@ impl Ripdoc {
 				.with_private_items(options.include_private)
 				.with_source_labels(self.render_source_labels)
 				.with_format(self.render_format)
+				.with_source_root(rt.package_root().to_path_buf())
 				.with_selection(selection);
 			let mut rendered = renderer.render(&crate_data)?;
 
@@ -429,7 +430,8 @@ impl Ripdoc {
 				.with_auto_impls(self.auto_impls)
 				.with_private_items(private_items)
 				.with_source_labels(self.render_source_labels)
-				.with_format(self.render_format);
+				.with_format(self.render_format)
+				.with_source_root(rt.package_root().to_path_buf());
 
 			if !full_source_ids.is_empty() {
 				let index = SearchIndex::build(&crate_data, private_items, Some(rt.package_root()));

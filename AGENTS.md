@@ -1,23 +1,29 @@
-# PRODUCTIVITY: Skim any crate APIs/docs through cli tool
+# ripdoc quick notes
 
 - Usage: `ripdoc <COMMAND> [TARGET] [OPTIONS]`
-- Basic skim from any directory: `ripdoc print [target]` → printed Markdown with top-level docs and code skeleton
-- Can target crates.io (no url needed, just name) or local crate paths
-- Get structure only: `ripdoc list [target] [--search/-s term]` → list of modules/macros/types with source locations
-- Search within docs: `ripdoc print [target] --search <term>` (combine with `--search-spec name,doc,path,signature` and `--direct-match-only`/`-d` to avoid auto-expanding parents)
-- OR searches: `ripdoc print gix --search "init|clone|fetch|remote|config"`
-- Raw data for tooling: `ripdoc raw [target]` → JSON rustdoc model; useful with `jq`/scripts
-- Fetch README: `ripdoc readme [target]` → fetches and displays the README
-- Private/auto trait details: add `--private` and/or `--auto-impls`
-- Feature gating flags work the same as with cargo
-- Source tracing: Injects `### Source: path/to/file.rs` labels on file transitions (disable with `--no-source-labels`)
-- Stateful skeleton builder: `ripdoc skelebuild add [target] [--implementation]`
-  - Incrementally builds a custom "source map" (default `skeleton.md`)
-  - Mix API outlines with full source code (`--implementation`) while preserving crate hierarchy
-  - CRUD ops: `add`, `remove`, `reset`, `status`, `rebuild`
-  - Items are deduplicated: re-exported items are only rendered at their first occurrence
-  - Shared visited set prevents redundant rendering across multiple targets in a build
-  - `reset` preserves output path and `--plain` setting; only clears entries
-  - `inject --at <index>` is the most reliable way to interleave commentary
-  - **Shell quoting**: Use single quotes for `inject` content containing `()` or special chars
-- Literal source extraction: Add `--source` or `--raw-source` to `print` or `skelebuild add` to get unmodified file content.
+- Targets: crates.io names (`serde`), `name@version`, or local paths (`./path/to/crate`).
+
+## Common flows
+
+- Print skeleton: `ripdoc print [target]`
+- Print a specific item (path mode): `ripdoc print [target] [ITEM]`
+  - Also supported: `ripdoc print ./path/to/crate::crate::Type`
+- Search: `ripdoc print [target] --search <query>`
+  - Domains: `--search-spec name,doc,signature,path`
+  - OR queries: `--search "init|clone|fetch"`
+- List items: `ripdoc list [target] [--search <query>]` (includes source locations)
+- Raw rustdoc JSON: `ripdoc raw [target]`
+
+## Output knobs
+
+- Source labels: `--no-source-labels`
+- Include implementation spans: `--implementation`
+- Include whole files: `--raw-source` / `--source`
+- Color: auto-disabled when stdout isn’t a TTY; force off with `--no-color` or `NO_COLOR=1`.
+
+## skelebuild
+
+- Stateful builder: `ripdoc skelebuild add <target> [ITEM] [--implementation|--raw-source]`
+- Interleave notes: `ripdoc skelebuild inject '...markdown...' --at <index>`
+- Manage state: `status` (read-only), `rebuild` (rewrites output), `remove`, `reset`
+- State file: `~/.local/state/ripdoc/skelebuild.json`

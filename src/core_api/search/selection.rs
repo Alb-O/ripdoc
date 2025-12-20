@@ -29,12 +29,22 @@ pub fn build_render_selection(
 					context.insert(path.id.clone());
 					// Also include ancestors of the target struct
 					if let Some(target_entry) = index.get(&path.id) {
-						context.extend(target_entry.ancestors.iter().cloned());
+						context.extend(target_entry.ancestors.iter().copied());
 					}
 				}
 			}
 		}
 	}
+
+	// Full-source items should still render even when there are no explicit search results.
+	for id in &full_source {
+		matches.insert(*id);
+		context.insert(*id);
+		if let Some(entry) = index.get(id) {
+			context.extend(entry.ancestors.iter().copied());
+		}
+	}
+
 	if expand_containers {
 		let containers: HashSet<Id> = results
 			.iter()

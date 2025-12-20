@@ -12,6 +12,32 @@ use crate::core_api::search::{
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
 
+fn normalize_target_spec_for_storage(target: &str) -> String {
+	let parsed = crate::cargo_utils::target::Target::parse(target);
+	let Ok(parsed) = parsed else {
+		return target.to_string();
+	};
+	match parsed.entrypoint {
+		crate::cargo_utils::target::Entrypoint::Path(path) => {
+			let abs = if path.is_relative() {
+				match std::path::absolute(&path) {
+					Ok(abs) => abs,
+					Err(_) => return target.to_string(),
+				}
+			} else {
+				path
+			};
+			let mut spec = abs.to_string_lossy().to_string();
+			if !parsed.path.is_empty() {
+				spec.push_str("::");
+				spec.push_str(&parsed.path.join("::"));
+			}
+			spec
+		}
+		crate::cargo_utils::target::Entrypoint::Name { .. } => target.to_string(),
+	}
+}
+
 /// State of an ongoing skeleton build.
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SkeleState {
@@ -105,21 +131,37 @@ impl SkeleState {
 				SkeleEntry::Target(t) => {
 					let resolved = match resolve_target(&t.path, false) {
 						Ok(r) => r,
-						Err(_) => continue, // Skip unresolved targets during rebuild
+						Err(err) => {
+							grouped_entries.push(SkeleGroup::Injection(format!(
+								"> [!ERROR] Failed to resolve target `{}`: {err}\n",
+								t.path
+							)));
+							continue;
+						}
 					};
 					for rt in resolved {
 						let pkg_root = rt.package_root().to_path_buf();
-						if !crates_data.contains_key(&pkg_root) {
-							let data = rt.read_crate(
-								false,
-								false,
-								vec![],
-								true,
-								true,
-								&crate::cargo_utils::CacheConfig::default(),
-							)?;
-							crates_data.insert(pkg_root.clone(), data);
-						}
+								if !crates_data.contains_key(&pkg_root) {
+									match rt.read_crate(
+										false,
+										false,
+										vec![],
+										true,
+										true,
+										&crate::cargo_utils::CacheConfig::default(),
+									) {
+										Ok(data) => {
+											crates_data.insert(pkg_root.clone(), data);
+										}
+										Err(err) => {
+											grouped_entries.push(SkeleGroup::Injection(format!(
+												"> [!ERROR] Failed to load crate for `{}`: {err}\n",
+												t.path
+											)));
+											continue;
+										}
+									}
+								}
 
 						if let Some(SkeleGroup::Targets {
 							pkg_root: last_root,
@@ -156,6 +198,7 @@ impl SkeleState {
 				}
 				SkeleGroup::Targets { pkg_root, targets } => {
 					let crate_data = crates_data.get(&pkg_root).unwrap();
+					let mut warnings: Vec<String> = Vec::new();
 					let mut full_source = HashSet::new();
 					let mut raw_files = HashSet::new();
 					let mut queries = Vec::new();
@@ -186,19 +229,29 @@ impl SkeleState {
 						}
 					}
 
-					// Append raw files first if any
+					// Append raw files first if any.
+					let mut wrote_raw_files = false;
 					for file_path in raw_files {
 						let abs_path = if file_path.is_absolute() {
 							file_path.clone()
 						} else {
 							pkg_root.join(&file_path)
 						};
-						if let Ok(content) = fs::read_to_string(&abs_path) {
-							final_output.push_str(&format!(
-								"// ripdoc:source: {}\n\n{}\n\n",
-								file_path.display(),
-								content
-							));
+						match fs::read_to_string(&abs_path) {
+							Ok(content) => {
+								wrote_raw_files = true;
+								final_output.push_str(&format!(
+									"// ripdoc:source: {}\n\n{}\n\n",
+									file_path.display(),
+									content
+								));
+							}
+							Err(err) => {
+								warnings.push(format!(
+									"> [!ERROR] Source not found at `{}`: {err}",
+									abs_path.display()
+								));
+							}
 						}
 					}
 
@@ -206,6 +259,25 @@ impl SkeleState {
 					search_options.domains = SearchDomain::PATHS;
 					let index = SearchIndex::build(crate_data, true, Some(&pkg_root));
 					let search_results = index.search(&search_options);
+
+					if search_results.is_empty() && full_source.is_empty() && !wrote_raw_files {
+						if queries.is_empty() {
+							warnings.push(
+								"> [!WARNING] No renderable targets found in this section.".to_string(),
+							);
+						} else {
+							warnings.push(format!(
+								"> [!WARNING] No matches found for: `{}`",
+								queries.join("`, `")
+							));
+						}
+					}
+
+					if !warnings.is_empty() {
+						final_output.push_str(&warnings.join("\n"));
+						final_output.push_str("\n\n");
+					}
+
 					let selection = build_render_selection(
 						&index,
 						&search_results,
@@ -267,6 +339,8 @@ pub enum SkeleAction {
 	Reset,
 	/// Show status.
 	Status,
+	/// Rebuild output using current entries.
+	Rebuild,
 }
 
 /// Executes the skelebuild subcommand.
@@ -279,36 +353,50 @@ pub fn run_skelebuild(
 	let mut state = SkeleState::load();
 
 	if let Some(ref out) = output {
-		state.output_path = Some(out.clone());
+		let out = if out.is_relative() {
+			std::path::absolute(out).map_err(|err| {
+				RipdocError::InvalidTarget(format!(
+					"Failed to resolve output path '{}': {err}",
+					out.display()
+				))
+			})?
+		} else {
+			out.clone()
+		};
+		state.output_path = Some(out);
 	}
 	if plain {
 		state.plain = true;
 	}
 
+	let mut should_rebuild = false;
 	match action {
 		Some(SkeleAction::Add {
 			target,
 			implementation,
 			raw_source,
 		}) => {
+			should_rebuild = true;
+			let normalized_target = normalize_target_spec_for_storage(&target);
 			if !state.entries.iter().any(|e| match e {
-				SkeleEntry::Target(t) => t.path == target,
+				SkeleEntry::Target(t) => t.path == normalized_target,
 				_ => false,
 			}) {
 				state.entries.push(SkeleEntry::Target(SkeleTarget {
-					path: target.clone(),
+					path: normalized_target.clone(),
 					implementation,
 					raw_source,
 				}));
 				println!(
 					"Added target: {} (implementation: {}, raw_source: {})",
-					target,
+					normalized_target,
 					if implementation { "yes" } else { "no" },
 					if raw_source { "yes" } else { "no" }
 				);
 			}
 		}
 		Some(SkeleAction::Inject { content, after, at }) => {
+			should_rebuild = true;
 			let injection = SkeleEntry::Injection(SkeleInjection { content });
 			if let Some(index) = at {
 				if index > state.entries.len() {
@@ -365,6 +453,7 @@ pub fn run_skelebuild(
 			}
 		}
 		Some(SkeleAction::Remove(target_str)) => {
+			should_rebuild = true;
 			state.entries.retain(|e| match e {
 				SkeleEntry::Target(t) => t.path != target_str,
 				SkeleEntry::Injection(i) => i.content != target_str,
@@ -372,6 +461,7 @@ pub fn run_skelebuild(
 			println!("Removed entry: {}", target_str);
 		}
 		Some(SkeleAction::Reset) => {
+			should_rebuild = true;
 			// Preserve output path and plain setting from previous state unless overridden
 			let prev_output = state.output_path.clone();
 			let prev_plain = state.plain;
@@ -380,12 +470,17 @@ pub fn run_skelebuild(
 			state.plain = plain || prev_plain;
 			println!("State reset (entries cleared, output/plain preserved).");
 		}
+		Some(SkeleAction::Rebuild) => {
+			should_rebuild = true;
+		}
 		Some(SkeleAction::Status) | None => {
-			// Just showing status or falling through to rebuild
+			// Status is read-only and does not rewrite the output file.
 		}
 	}
 
-	state.rebuild(ripdoc)?;
+	if should_rebuild {
+		state.rebuild(ripdoc)?;
+	}
 	state.save()?;
 
 	let output_path = state
