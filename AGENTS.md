@@ -12,6 +12,8 @@
   - Domains: `--search-spec name,doc,signature,path`
   - OR queries: `--search "init|clone|fetch"`
 - List items: `ripdoc list [target] [--search <query>]` (includes source locations)
+  - Tip: use `--search-spec path` to discover the exact `crate::...` path ripdoc expects.
+  - Note: for local *bin* crates, the rustdoc crate name is often the bin name (e.g. `binname::...`), not the folder/package name.
 - Raw rustdoc JSON: `ripdoc raw [target]`
 
 ## Output knobs

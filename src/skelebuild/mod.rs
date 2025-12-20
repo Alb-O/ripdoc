@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use crate::cargo_utils::resolve_target;
 use crate::core_api::error::RipdocError;
 use crate::core_api::search::{
-	SearchDomain, SearchIndex, SearchOptions, build_render_selection,
+	SearchDomain, SearchIndex, SearchItemKind, SearchOptions, SearchResult,
+	build_render_selection,
 };
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
@@ -201,15 +202,79 @@ impl SkeleState {
 					let mut warnings: Vec<String> = Vec::new();
 					let mut full_source = HashSet::new();
 					let mut raw_files = HashSet::new();
-					let mut queries = Vec::new();
+					let mut selection_results: Vec<SearchResult> = Vec::new();
+
+					let index = SearchIndex::build(crate_data, true, Some(&pkg_root));
+					let crate_name = crate_data
+						.index
+						.get(&crate_data.root)
+						.and_then(|root| root.name.clone());
 
 					for target in targets {
-						if target.raw_source {
-							let mut options = SearchOptions::new(&target.path);
+						let parsed = crate::cargo_utils::target::Target::parse(&target.path);
+						let base_query = match parsed {
+							Ok(parsed) => match parsed.entrypoint {
+								crate::cargo_utils::target::Entrypoint::Name { name, .. } => {
+									if parsed.path.is_empty() {
+										name
+									} else {
+										format!("{name}::{}", parsed.path.join("::"))
+									}
+								}
+								crate::cargo_utils::target::Entrypoint::Path(_) => parsed.path.join("::"),
+							},
+							Err(_) => String::new(),
+						};
+
+						if base_query.is_empty() {
+							let flag = if target.raw_source {
+								"--raw-source"
+							} else if target.implementation {
+								"--implementation"
+							} else {
+								"target"
+							};
+							warnings.push(format!(
+								"> [!WARNING] {flag} needs an item path: `{}`",
+								target.path
+							));
+							continue;
+						}
+
+						let mut candidates: Vec<String> = vec![base_query.clone()];
+						if let Some((first, rest)) = base_query.split_once("::") {
+							if let Some(crate_name) = crate_name.as_deref()
+								&& first != crate_name
+							{
+								candidates.push(format!("{crate_name}::{rest}"));
+							}
+							candidates.push(rest.to_string());
+						}
+						candidates.dedup();
+
+						let mut resolved_query: Option<String> = None;
+						let mut resolved_results = Vec::new();
+						for candidate in &candidates {
+							let mut options = SearchOptions::new(candidate);
 							options.domains = SearchDomain::PATHS;
-							let results = SearchIndex::build(crate_data, true, Some(&pkg_root))
-								.search(&options);
-							for res in results {
+							let results = index.search(&options);
+							if !results.is_empty() {
+								resolved_query = Some(candidate.clone());
+								resolved_results = results;
+								break;
+							}
+						}
+
+						let Some(_resolved_query) = resolved_query else {
+							warnings.push(format!(
+								"> [!WARNING] No matches found for: `{}`",
+								candidates.join("`, `")
+							));
+							continue;
+						};
+
+						if target.raw_source {
+							for res in resolved_results {
 								if let Some(item) = crate_data.index.get(&res.item_id) {
 									if let Some(span) = &item.span {
 										raw_files.insert(span.filename.clone());
@@ -217,15 +282,17 @@ impl SkeleState {
 								}
 							}
 						} else if target.implementation {
-							let mut options = SearchOptions::new(&target.path);
-							options.domains = SearchDomain::PATHS;
-							let results = SearchIndex::build(crate_data, true, Some(&pkg_root))
-								.search(&options);
-							for res in results {
-								full_source.insert(res.item_id);
+							for res in &resolved_results {
+								match res.kind {
+									SearchItemKind::Function | SearchItemKind::Method => {
+										full_source.insert(res.item_id);
+									}
+									_ => {}
+								}
 							}
+							selection_results.extend(resolved_results);
 						} else {
-							queries.push(target.path);
+							selection_results.extend(resolved_results);
 						}
 					}
 
@@ -255,22 +322,14 @@ impl SkeleState {
 						}
 					}
 
-					let mut search_options = SearchOptions::new(&queries.join("|"));
-					search_options.domains = SearchDomain::PATHS;
-					let index = SearchIndex::build(crate_data, true, Some(&pkg_root));
-					let search_results = index.search(&search_options);
+					let mut search_results = selection_results;
+					let mut seen = HashSet::new();
+					search_results.retain(|r| seen.insert(r.item_id));
 
 					if search_results.is_empty() && full_source.is_empty() && !wrote_raw_files {
-						if queries.is_empty() {
-							warnings.push(
-								"> [!WARNING] No renderable targets found in this section.".to_string(),
-							);
-						} else {
-							warnings.push(format!(
-								"> [!WARNING] No matches found for: `{}`",
-								queries.join("`, `")
-							));
-						}
+						warnings.push(
+							"> [!WARNING] No renderable targets found in this section.".to_string(),
+						);
 					}
 
 					if !warnings.is_empty() {
