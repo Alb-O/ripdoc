@@ -32,6 +32,8 @@ pub fn run_skelebuild(
 	ripdoc: &Ripdoc,
 ) -> Result<()> {
 	let mut state = SkeleState::load();
+	let prev_output_path = state.output_path.clone();
+	let prev_plain = state.plain;
 
 	if let Some(ref out) = output {
 		let out = if out.is_relative() {
@@ -50,7 +52,9 @@ pub fn run_skelebuild(
 		state.plain = true;
 	}
 
+	let config_changed = state.output_path != prev_output_path || state.plain != prev_plain;
 	let show_state_on_exit = show_state || matches!(action.as_ref(), Some(SkeleAction::Status));
+	let mut action_summary: Option<String> = None;
 
 	let mut should_rebuild = false;
 	match action {
@@ -64,22 +68,29 @@ pub fn run_skelebuild(
 			if validate {
 				validate_add_target_or_error(&normalized_target, ripdoc)?;
 			}
-			should_rebuild = true;
-			if !state.entries.iter().any(|e| match e {
+
+			let already_present = state.entries.iter().any(|e| match e {
 				SkeleEntry::Target(t) => t.path == normalized_target,
 				_ => false,
-			}) {
+			});
+
+			should_rebuild = config_changed;
+			if already_present {
+				action_summary = Some(format!(
+					"No change (target already exists): {normalized_target}"
+				));
+			} else {
 				state.entries.push(SkeleEntry::Target(SkeleTarget {
 					path: normalized_target.clone(),
 					implementation,
 					raw_source,
 				}));
-				println!(
-					"Added target: {} (implementation: {}, raw_source: {})",
-					normalized_target,
+				should_rebuild = true;
+				action_summary = Some(format!(
+					"Added target: {normalized_target} (implementation: {}, raw_source: {})",
 					if implementation { "yes" } else { "no" },
 					if raw_source { "yes" } else { "no" }
-				);
+				));
 			}
 		}
 		Some(SkeleAction::Inject {
@@ -97,7 +108,8 @@ pub fn run_skelebuild(
 				unescape_inject_content(&content)
 			};
 			let injection = SkeleEntry::Injection(SkeleInjection { content });
-			if let Some(index) = at {
+
+			let summary = if let Some(index) = at {
 				if index > state.entries.len() {
 					return Err(RipdocError::InvalidTarget(format!(
 						"Invalid --at index {index}; valid range is 0..={}.",
@@ -105,22 +117,22 @@ pub fn run_skelebuild(
 					)));
 				}
 				state.entries.insert(index, injection);
-				println!("Injected commentary at index {index}.");
+				format!("Injected commentary at index {index}.")
 			} else if let Some(spec) = before_target {
 				let index = find_target_match(&state.entries, &spec)?;
 				state.entries.insert(index, injection);
-				println!("Injected commentary before target at entry #{index}.");
+				format!("Injected commentary before target at entry #{index}.")
 			} else if let Some(spec) = after_target {
 				let index = find_target_match(&state.entries, &spec)?;
 				let insert_at = index + 1;
 				state.entries.insert(insert_at, injection);
-				println!("Injected commentary after target at entry #{index}.");
+				format!("Injected commentary after target at entry #{index}.")
 			} else if let Some(after_key) = after {
 				let after_key = after_key.trim().to_string();
 				let after_upper = after_key.to_uppercase();
 				if after_upper == "START" || after_upper == "TOP" || after_upper == "BEGIN" {
 					state.entries.insert(0, injection);
-					println!("Injected commentary at the start.");
+					"Injected commentary at the start.".to_string()
 				} else {
 					let mut matches: Vec<usize> = Vec::new();
 					for (idx, entry) in state.entries.iter().enumerate() {
@@ -147,7 +159,7 @@ pub fn run_skelebuild(
 						[only] => {
 							let insert_at = only + 1;
 							state.entries.insert(insert_at, injection);
-							println!("Injected commentary after entry #{only}.");
+							format!("Injected commentary after entry #{only}.")
 						}
 						_ => {
 							return Err(RipdocError::InvalidTarget(format!(
@@ -159,15 +171,16 @@ pub fn run_skelebuild(
 				}
 			} else {
 				state.entries.push(injection);
-				println!("Injected commentary at end.");
-			}
+				"Injected commentary at end.".to_string()
+			};
+
+			action_summary = Some(summary);
 		}
 		Some(SkeleAction::Update {
 			spec,
 			implementation,
 			raw_source,
 		}) => {
-			should_rebuild = true;
 			let index = find_target_match(&state.entries, &spec)?;
 			let entry = state
 				.entries
@@ -178,39 +191,61 @@ pub fn run_skelebuild(
 					"Entry #{index} matched '{spec}' but is not a target",
 				)));
 			};
+
+			let prev_impl = target.implementation;
+			let prev_raw_source = target.raw_source;
 			if let Some(value) = implementation {
 				target.implementation = value;
 			}
 			if let Some(value) = raw_source {
 				target.raw_source = value;
 			}
-			println!(
-				"Updated target: {} (implementation: {}, raw_source: {})",
-				target.path,
-				if target.implementation { "yes" } else { "no" },
-				if target.raw_source { "yes" } else { "no" }
-			);
+
+			let changed = target.implementation != prev_impl || target.raw_source != prev_raw_source;
+			should_rebuild = config_changed || changed;
+			action_summary = Some(if changed {
+				format!(
+					"Updated target: {} (implementation: {}, raw_source: {})",
+					target.path,
+					if target.implementation { "yes" } else { "no" },
+					if target.raw_source { "yes" } else { "no" }
+				)
+			} else {
+				format!(
+					"No change (target already has requested settings): {} (implementation: {}, raw_source: {})",
+					target.path,
+					if target.implementation { "yes" } else { "no" },
+					if target.raw_source { "yes" } else { "no" }
+				)
+			});
 		}
 		Some(SkeleAction::Remove(target_str)) => {
-			should_rebuild = true;
+			let before_len = state.entries.len();
 			state.entries.retain(|e| match e {
 				SkeleEntry::Target(t) => t.path != target_str,
 				SkeleEntry::Injection(i) => i.content != target_str,
 			});
-			println!("Removed entry: {}", target_str);
+			let removed = before_len - state.entries.len();
+			should_rebuild = config_changed || removed > 0;
+			action_summary = Some(if removed > 0 {
+				format!("Removed entry: {target_str} (removed: {removed})")
+			} else {
+				format!("No entries removed for: {target_str}")
+			});
 		}
 		Some(SkeleAction::Reset) => {
-			should_rebuild = true;
-			// Preserve output path and plain setting from previous state unless overridden
+			// Preserve output path and plain setting from previous state unless overridden.
 			let prev_output = state.output_path.clone();
 			let prev_plain = state.plain;
 			state = SkeleState::default();
 			state.output_path = output.clone().or(prev_output);
 			state.plain = plain || prev_plain;
-			println!("State reset (entries cleared, output/plain preserved).");
+			should_rebuild = true;
+			action_summary = Some("State reset (entries cleared, output/plain preserved).".to_string());
 		}
 		Some(SkeleAction::Rebuild) => {
 			should_rebuild = true;
+			action_summary = Some("Rebuilt output.".to_string());
 		}
 		Some(SkeleAction::Status) | None => {
 			// Status is read-only and does not rewrite the output file.
@@ -258,6 +293,12 @@ pub fn run_skelebuild(
 				}
 			}
 		}
+	} else if let Some(summary) = action_summary {
+		println!(
+			"{summary} (output: {}, entries: {})",
+			output_path.display(),
+			state.entries.len()
+		);
 	} else {
 		println!("Output: {} (entries: {})", output_path.display(), state.entries.len());
 	}

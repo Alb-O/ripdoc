@@ -34,5 +34,5 @@
   - `inject` unescapes `\n` by default; pass `--literal` to keep backslashes.
 - Markdown spacing: if you inject lists/callouts, end with a blank line so the next `### Source: ...` header stays readable.
 - Source spans: ripdoc resolves relative span paths against the target crate root.
-- Manage state: `status` (read-only), `rebuild` (rewrites output), `remove`, `reset` (use `skelebuild --show-state ...` to print full state)
+- Manage state: `status` (read-only, verbose), `rebuild` (rewrites output), `remove`, `reset` (most commands print a one-line summary; use `skelebuild --show-state ...` to print full state)
 - State file: `~/.local/state/ripdoc/skelebuild.json`

@@ -37,7 +37,7 @@ ripdoc skelebuild rebuild
 ## Tips
 
 - Prefer `inject --after-target <spec>` / `--before-target <spec>`; `--at <index>` works, but indices shift as you insert.
-- `status` is read-only (it won’t rewrite your output file); pass `--show-state` to print the full state after other commands.
+- Most commands print a single summary line; `status` is read-only (it won’t rewrite your output file) and is the easiest way to see indices; pass `--show-state` to print the full state after other commands.
 - `--implementation` includes method/function bodies when available; for containers it will also pull in relevant `impl` blocks when possible.
 - Impl-block targeting: you can target an entire impl block with `Type::Trait` (e.g. `Editor::EditorOps`).
 - Validation: `skelebuild add` validates targets by default and fails early; pass `--no-validate` to record an entry without validating it.
