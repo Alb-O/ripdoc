@@ -5,6 +5,10 @@ use crate::core_api::search::{SearchDomain, SearchIndex, SearchItemKind, SearchO
 use crate::core_api::{Result, Ripdoc};
 use super::state::SkeleEntry;
 
+/// Normalize a target specification for persistent storage.
+///
+/// If the target is a relative path, it is converted to an absolute path to ensure
+/// the state remains valid even if ripdoc is executed from a different directory later.
 pub fn normalize_target_spec_for_storage(target: &str) -> String {
 	let parsed = crate::cargo_utils::target::Target::parse(target);
 	let Ok(parsed) = parsed else {
@@ -31,6 +35,7 @@ pub fn normalize_target_spec_for_storage(target: &str) -> String {
 	}
 }
 
+/// Generate a list of candidate path queries for a given base query and crate name.
 pub fn build_query_candidates(base_query: &str, crate_name: Option<&str>) -> Vec<String> {
 	let mut candidates: Vec<String> = vec![base_query.to_string()];
 	if let Some((first, rest)) = base_query.split_once("::") {
@@ -45,6 +50,9 @@ pub fn build_query_candidates(base_query: &str, crate_name: Option<&str>) -> Vec
 	candidates
 }
 
+/// Resolve the best matching item in the index for a given path query.
+///
+/// This performs a search across candidates and prefers local matches (source within `pkg_root`).
 pub fn resolve_best_path_match(
 	index: &SearchIndex,
 	crate_name: Option<&str>,
@@ -101,6 +109,7 @@ pub fn resolve_best_path_match(
 	None
 }
 
+/// Resolve a target as an implementation block (e.g., `Type::Trait`).
 pub fn resolve_impl_target(
 	index: &SearchIndex,
 	crate_data: &rustdoc_types::Crate,
@@ -163,6 +172,7 @@ pub fn resolve_impl_target(
 	None
 }
 
+/// Validate that a target specification can be resolved against its crate.
 pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Result<()> {
 	let parsed = crate::cargo_utils::target::Target::parse(target_spec)?;
 	if parsed.path.is_empty() {
@@ -245,6 +255,7 @@ pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Resul
 	Ok(())
 }
 
+/// Unescape backslash sequences in injection content (e.g., `\n` to newline).
 pub fn unescape_inject_content(input: &str) -> String {
 	let mut out = String::with_capacity(input.len());
 	let mut chars = input.chars();
@@ -268,6 +279,7 @@ pub fn unescape_inject_content(input: &str) -> String {
 	out
 }
 
+/// Check if a stored target entry matches a user-provided search spec.
 pub fn target_entry_matches_spec(stored_target: &str, spec: &str) -> bool {
 	let spec = spec.trim();
 	if spec.is_empty() {
@@ -288,6 +300,7 @@ pub fn target_entry_matches_spec(stored_target: &str, spec: &str) -> bool {
 	stored_item == spec || stored_item.ends_with(&format!("::{spec}")) || stored_item.contains(spec)
 }
 
+/// Locate a target entry in the current state that matches the provided spec.
 pub fn find_target_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 	let mut matches: Vec<usize> = Vec::new();
 	for (idx, entry) in entries.iter().enumerate() {

@@ -1,7 +1,12 @@
+/// Module rendering logic.
 pub mod module;
+/// Struct and field rendering logic.
 pub mod structs;
+/// Enum and variant rendering logic.
 pub mod enums;
+/// Import and re-export rendering logic.
 pub mod use_stmt;
+/// Rendering logic for functions, constants, and type aliases.
 pub mod others;
 
 use rustdoc_types::{Id, Item, ItemEnum, Visibility};

@@ -1,4 +1,6 @@
+/// Persistent state and data structures for skelebuild.
 pub mod state;
+/// Target resolution and validation logic.
 pub mod resolver;
 mod rebuild;
 
