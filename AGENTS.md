@@ -31,6 +31,7 @@
 - Update flags: `ripdoc skelebuild update <spec> [--implementation|--no-implementation] [--raw-source|--no-raw-source]`
 - Impl-block targeting: `ripdoc skelebuild add ./path/to/crate Type::Trait`
 - Interleave notes: `ripdoc skelebuild inject '...markdown...' --after-target <spec>` (or `--before-target`; `--at <index>` is precise but indices shift)
+  - `inject` unescapes `\n` by default; pass `--literal` to keep backslashes.
 - Markdown spacing: if you inject lists/callouts, end with a blank line so the next `### Source: ...` header stays readable.
 - Source spans: ripdoc resolves relative span paths against the target crate root.
 - Manage state: `status` (read-only), `rebuild` (rewrites output), `remove`, `reset` (use `skelebuild --show-state ...` to print full state)

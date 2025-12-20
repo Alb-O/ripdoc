@@ -159,6 +159,7 @@ fn skelebuild_realistic_session_produces_detailed_markdown() -> Result<(), Box<d
 			raw_source: false,
 		}),
 		SkeleEntry::Injection(SkeleInjection {
+			// Stored injections are literal; CLI `inject` now unescapes `\\n` by default.
 			content: "### Notes\n- first\n- second".to_string(),
 		}),
 		SkeleEntry::Target(SkeleTarget {

@@ -266,6 +266,29 @@ fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Result<()
 	Ok(())
 }
 
+fn unescape_inject_content(input: &str) -> String {
+	let mut out = String::with_capacity(input.len());
+	let mut chars = input.chars();
+	while let Some(ch) = chars.next() {
+		if ch != '\\' {
+			out.push(ch);
+			continue;
+		}
+		match chars.next() {
+			Some('n') => out.push('\n'),
+			Some('r') => out.push('\r'),
+			Some('t') => out.push('\t'),
+			Some('\\') => out.push('\\'),
+			Some(other) => {
+				out.push('\\');
+				out.push(other);
+			}
+			None => out.push('\\'),
+		}
+	}
+	out
+}
+
 fn target_entry_matches_spec(stored_target: &str, spec: &str) -> bool {
 	let spec = spec.trim();
 	if spec.is_empty() {
@@ -767,6 +790,8 @@ pub enum SkeleAction {
 	Inject {
 		/// Text to inject.
 		content: String,
+		/// Treat `\n` / `\t` as literal characters.
+		literal: bool,
 		/// Optional target path/content prefix to inject after.
 		after: Option<String>,
 		/// Inject after a matching target entry.
@@ -856,12 +881,18 @@ pub fn run_skelebuild(
 		}
 		Some(SkeleAction::Inject {
 			content,
+			literal,
 			after,
 			after_target,
 			before_target,
 			at,
 		}) => {
 			should_rebuild = true;
+			let content = if literal {
+				content
+			} else {
+				unescape_inject_content(&content)
+			};
 			let injection = SkeleEntry::Injection(SkeleInjection { content });
 			if let Some(index) = at {
 				if index > state.entries.len() {
@@ -1029,4 +1060,17 @@ pub fn run_skelebuild(
 	}
 
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::unescape_inject_content;
+
+	#[test]
+	fn inject_unescapes_newlines_by_default() {
+		assert_eq!(unescape_inject_content("# Title\\n\\nBody"), "# Title\n\nBody");
+		assert_eq!(unescape_inject_content("a\\tb"), "a\tb");
+		assert_eq!(unescape_inject_content("\\\\n"), "\\n");
+		assert_eq!(unescape_inject_content("trailing\\"), "trailing\\");
+	}
 }

@@ -251,6 +251,10 @@ enum SkelebuildSubcommand {
 		/// Text to inject.
 		content: String,
 
+		/// Treat `\\n` / `\\t` as literal characters.
+		#[arg(long, default_value_t = false)]
+		literal: bool,
+
 		/// Inject after this entry (target path or injection content prefix).
 		#[arg(long, conflicts_with_all = ["at", "after_target", "before_target"])]
 		after: Option<String>,
@@ -902,6 +906,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 					}
 					SkelebuildSubcommand::Inject {
 						content,
+						literal,
 						after,
 						after_target,
 						before_target,
@@ -913,6 +918,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Inject {
 							content,
+							literal,
 							after,
 							after_target,
 							before_target,

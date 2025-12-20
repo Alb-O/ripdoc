@@ -18,6 +18,7 @@ ripdoc skelebuild add bat::controller::Controller::run --implementation
 # ripdoc skelebuild add bat::config::Config --raw-source
 
 # Insert your own notes (prefer target-relative insertion)
+# `inject` interprets `\n` as newlines by default.
 ripdoc skelebuild inject '## Notes\nWhy this matters...' --after-target bat::config::Config
 
 # Show indices / full state when needed
@@ -44,6 +45,7 @@ ripdoc skelebuild rebuild
 - Source path resolution is crate-root aware: relative spans like `src/main.rs` are resolved against the target crate, not your current working directory.
 - Markdown interleaving: `skelebuild` inserts blank lines between blocks, but if you inject an unterminated list/callout, add a trailing blank line so the next `### Source: ...` header doesn’t get “captured” by Markdown formatting.
 - Fix typos / toggle flags: use `skelebuild update <spec> [--implementation|--no-implementation] [--raw-source|--no-raw-source]`.
+- Inject quoting: `inject` unescapes `\n`, `\t`, and `\\` by default; pass `--literal` to keep backslashes (useful for regexes or showing escape sequences).
 
 ## Local crates vs crates.io
 
