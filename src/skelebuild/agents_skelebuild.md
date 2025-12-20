@@ -108,3 +108,54 @@ Both of these work:
 
 - `ripdoc skelebuild add ./path/to/crate crate::module::Type`
 - `ripdoc print ./path/to/crate crate::module::Type`
+
+## Speed Guide
+
+### Core Pattern: Parallel Bash Instances + `&&` Chains
+
+To build context at maximum speed, execute multiple **parallel bash tool calls** simultaneously, each containing a **sequential `&&` chain** of related operations.
+
+### Turbo Execution Pattern
+
+Trace multiple code paths simultaneously by launching parallel bash tools in a single response:
+
+```json
+{
+  "recipient_name": "multi_tool_use.parallel",
+  "parameters": {
+    "tool_uses": [
+      {
+        "recipient_name": "functions.bash",
+        "parameters": {
+          "command": "ripdoc skelebuild add ./crate Path1::Item1 --implementation && ripdoc skelebuild add ./crate Path1::Item2 --implementation",
+          "description": "Trace code path A"
+        }
+      },
+      {
+        "recipient_name": "functions.bash",
+        "parameters": {
+          "command": "ripdoc skelebuild add ./crate Path2::Item1 --implementation && ripdoc skelebuild add ./crate Path2::Item2 --implementation",
+          "description": "Trace code path B"
+        }
+      }
+    ]
+  }
+}
+```
+
+### Strategy for 1000+ Line Context in <60s
+
+1.  **Initialize once:** `ripdoc skelebuild reset --output <filename>.md --plain`
+2.  **Parallel Blast:** Launch 5-10 parallel `bash` tools.
+    *   **Track 1:** Core structs & lifecycle methods.
+    *   **Track 2:** Primary API surface implementation.
+    *   **Track 3:** Error handling & recovery paths.
+    *   **Track 4:** Test cases & raw source critical sections (`add-raw`).
+3.  **Finalize once:** `ripdoc skelebuild rebuild`
+
+### Rules of Thumb
+
+*   **Sequential (`&&`)**: Use within a single code path where order matters.
+*   **Parallel**: Use for unrelated code paths or different subsystems.
+*   **Batching**: Always use `--implementation` for methods to get full source context.
+*   **Deferred Rebuild**: Never rebuild until the very end to avoid redundant I/O.
