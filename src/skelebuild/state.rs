@@ -22,6 +22,8 @@ pub enum SkeleEntry {
 	Target(SkeleTarget),
 	/// A manual text injection.
 	Injection(SkeleInjection),
+	/// A raw source snippet loaded directly from disk.
+	RawSource(SkeleRawSource),
 }
 
 /// A target in the skeleton build.
@@ -43,6 +45,19 @@ pub struct SkeleInjection {
 	pub content: String,
 }
 
+/// A raw source snippet loaded directly from disk.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct SkeleRawSource {
+	/// Absolute path to the file.
+	pub file: PathBuf,
+	/// 1-based inclusive start line, if set.
+	#[serde(default)]
+	pub start_line: Option<usize>,
+	/// 1-based inclusive end line, if set.
+	#[serde(default)]
+	pub end_line: Option<usize>,
+}
+
 /// Action to perform on the skelebuild state.
 pub enum SkeleAction {
 	/// Add a target.
@@ -55,6 +70,22 @@ pub enum SkeleAction {
 		raw_source: bool,
 		/// Whether to validate the target before saving.
 		validate: bool,
+	},
+	/// Add multiple targets in one operation.
+	AddMany {
+		/// Target paths to add.
+		targets: Vec<String>,
+		/// Whether to include elided source implementation.
+		implementation: bool,
+		/// Whether to include literal, unelided source.
+		raw_source: bool,
+		/// Whether to validate the targets before saving.
+		validate: bool,
+	},
+	/// Add a raw source snippet from disk.
+	AddRaw {
+		/// Raw source spec: `/path/to/file.rs[:start[:end]]` (1-based lines).
+		spec: String,
 	},
 	/// Inject manual commentary.
 	Inject {
@@ -86,6 +117,8 @@ pub enum SkeleAction {
 	Reset,
 	/// Show status.
 	Status,
+	/// Preview the output to stdout.
+	Preview,
 	/// Rebuild output using current entries.
 	Rebuild,
 }

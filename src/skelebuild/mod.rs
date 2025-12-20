@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::core_api::error::RipdocError;
 use crate::core_api::{Result, Ripdoc};
 
-pub use state::{SkeleState, SkeleEntry, SkeleTarget, SkeleInjection, SkeleAction};
+pub use state::{SkeleAction, SkeleEntry, SkeleInjection, SkeleRawSource, SkeleState, SkeleTarget};
 pub use resolver::unescape_inject_content;
 
 use resolver::{
@@ -21,6 +21,7 @@ pub(crate) enum SkeleGroup {
 		targets: Vec<SkeleTarget>,
 	},
 	Injection(String),
+	RawSource(SkeleRawSource),
 }
 
 /// Executes the skelebuild subcommand.
@@ -65,9 +66,11 @@ pub fn run_skelebuild(
 			validate,
 		}) => {
 			let normalized_target = normalize_target_spec_for_storage(&target);
-			if validate {
-				validate_add_target_or_error(&normalized_target, ripdoc)?;
-			}
+			let validated = if validate {
+				Some(validate_add_target_or_error(&normalized_target, ripdoc)?)
+			} else {
+				None
+			};
 
 			let already_present = state.entries.iter().any(|e| match e {
 				SkeleEntry::Target(t) => t.path == normalized_target,
@@ -85,11 +88,103 @@ pub fn run_skelebuild(
 					implementation,
 					raw_source,
 				}));
+				let index = state.entries.len() - 1;
+				let source = validated
+					.as_ref()
+					.and_then(|info| info.source_location.as_deref())
+					.unwrap_or("-");
+				let span_lines = validated
+					.as_ref()
+					.and_then(|info| info.span_line_count)
+					.map(|count| count.to_string())
+					.unwrap_or_else(|| "-".to_string());
 				should_rebuild = true;
 				action_summary = Some(format!(
-					"Added target: {normalized_target} (implementation: {}, raw_source: {})",
+					"Added target: {normalized_target} (entry #{index}, source: {source}, span_lines: {span_lines}, implementation: {}, raw_source: {})",
 					if implementation { "yes" } else { "no" },
 					if raw_source { "yes" } else { "no" }
+				));
+			}
+		}
+		Some(SkeleAction::AddMany {
+			targets,
+			implementation,
+			raw_source,
+			validate,
+		}) => {
+			let mut added: Vec<String> = Vec::new();
+			let mut added_indices: Vec<usize> = Vec::new();
+			let mut already: Vec<String> = Vec::new();
+			for target in targets {
+				let normalized_target = normalize_target_spec_for_storage(&target);
+				if validate {
+					let _ = validate_add_target_or_error(&normalized_target, ripdoc)?;
+				}
+				let is_present = state.entries.iter().any(|e| match e {
+					SkeleEntry::Target(t) => t.path == normalized_target,
+					_ => false,
+				});
+				if is_present {
+					already.push(normalized_target);
+					continue;
+				}
+				added.push(normalized_target.clone());
+				state.entries.push(SkeleEntry::Target(SkeleTarget {
+					path: normalized_target,
+					implementation,
+					raw_source,
+				}));
+				added_indices.push(state.entries.len() - 1);
+			}
+
+			should_rebuild = config_changed || !added.is_empty();
+			if added.is_empty() {
+				action_summary = Some(format!(
+					"No change (all targets already exist): {}",
+					already.len()
+				));
+			} else {
+				let indices = if added_indices.len() <= 8 {
+					added_indices
+						.iter()
+						.map(|idx| format!("#{idx}"))
+						.collect::<Vec<_>>()
+						.join(", ")
+				} else {
+					format!(
+						"#{}..#{}",
+						added_indices.first().unwrap_or(&0),
+						added_indices.last().unwrap_or(&0)
+					)
+				};
+				action_summary = Some(format!(
+					"Added {} targets (entries: {indices}, implementation: {}, raw_source: {})",
+					added.len(),
+					if implementation { "yes" } else { "no" },
+					if raw_source { "yes" } else { "no" }
+				));
+			}
+		}
+		Some(SkeleAction::AddRaw { spec }) => {
+			let raw = parse_raw_source_spec(&spec)?;
+			let already_present = state.entries.iter().any(|e| match e {
+				SkeleEntry::RawSource(existing) => existing == &raw,
+				_ => false,
+			});
+
+			should_rebuild = config_changed;
+			if already_present {
+				action_summary = Some(format!(
+					"No change (raw source already exists): {}",
+					raw_source_summary(&raw)
+				));
+			} else {
+				state.entries.push(SkeleEntry::RawSource(raw.clone()));
+				let index = state.entries.len() - 1;
+				should_rebuild = true;
+				action_summary = Some(format!(
+					"Added raw source: {} (entry #{index})",
+					raw_source_summary(&raw)
 				));
 			}
 		}
@@ -132,7 +227,7 @@ pub fn run_skelebuild(
 				let after_upper = after_key.to_uppercase();
 				if after_upper == "START" || after_upper == "TOP" || after_upper == "BEGIN" {
 					state.entries.insert(0, injection);
-					"Injected commentary at the start.".to_string()
+					"Injected commentary at entry #0.".to_string()
 				} else {
 					let mut matches: Vec<usize> = Vec::new();
 					for (idx, entry) in state.entries.iter().enumerate() {
@@ -142,6 +237,10 @@ pub fn run_skelebuild(
 							}
 							SkeleEntry::Injection(i) => {
 								i.content == after_key || i.content.starts_with(&after_key)
+							}
+							SkeleEntry::RawSource(r) => {
+								let summary = raw_source_summary(r);
+								summary == after_key || summary.starts_with(&after_key)
 							}
 						};
 						if is_match {
@@ -171,7 +270,8 @@ pub fn run_skelebuild(
 				}
 			} else {
 				state.entries.push(injection);
-				"Injected commentary at end.".to_string()
+				let index = state.entries.len() - 1;
+				format!("Injected commentary at entry #{index}.")
 			};
 
 			action_summary = Some(summary);
@@ -224,6 +324,10 @@ pub fn run_skelebuild(
 			state.entries.retain(|e| match e {
 				SkeleEntry::Target(t) => t.path != target_str,
 				SkeleEntry::Injection(i) => i.content != target_str,
+				SkeleEntry::RawSource(r) => {
+					raw_source_summary(r) != target_str
+						&& r.file.to_string_lossy() != target_str
+				}
 			});
 			let removed = before_len - state.entries.len();
 			should_rebuild = config_changed || removed > 0;
@@ -242,6 +346,12 @@ pub fn run_skelebuild(
 			state.plain = plain || prev_plain;
 			should_rebuild = true;
 			action_summary = Some("State reset (entries cleared, output/plain preserved).".to_string());
+		}
+		Some(SkeleAction::Preview) => {
+			let rendered = state.build_output(ripdoc)?;
+			print!("{rendered}");
+			state.save()?;
+			return Ok(());
 		}
 		Some(SkeleAction::Rebuild) => {
 			should_rebuild = true;
@@ -291,6 +401,9 @@ pub fn run_skelebuild(
 					};
 					println!("    {idx}: [Inject] {summary}");
 				}
+				SkeleEntry::RawSource(raw) => {
+					println!("    {idx}: [Raw] {}", raw_source_summary(raw));
+				}
 			}
 		}
 	} else if let Some(summary) = action_summary {
@@ -304,4 +417,81 @@ pub fn run_skelebuild(
 	}
 
 	Ok(())
+}
+
+fn raw_source_summary(raw: &SkeleRawSource) -> String {
+	match (raw.start_line, raw.end_line) {
+		(Some(start), Some(end)) if start == end => format!("{}:{start}", raw.file.display()),
+		(Some(start), Some(end)) => format!("{}:{start}:{end}", raw.file.display()),
+		_ => raw.file.display().to_string(),
+	}
+}
+
+fn parse_raw_source_spec(spec: &str) -> Result<SkeleRawSource> {
+	let trimmed = spec.trim();
+	if trimmed.is_empty() {
+		return Err(RipdocError::InvalidTarget("Raw source spec is empty".to_string()));
+	}
+
+	let (path_part, start_line, end_line) = match trimmed.rsplit_once(':') {
+		None => (trimmed, None, None),
+		Some((maybe_path, last)) => {
+			let Ok(last_num) = last.parse::<usize>() else {
+				return Ok(SkeleRawSource {
+					file: normalize_file_path(trimmed)?,
+					start_line: None,
+					end_line: None,
+				});
+			};
+			match maybe_path.rsplit_once(':') {
+				Some((path, start)) => match start.parse::<usize>() {
+					Ok(start_num) => (path, Some(start_num), Some(last_num)),
+					Err(_) => (maybe_path, Some(last_num), Some(last_num)),
+				},
+				None => (maybe_path, Some(last_num), Some(last_num)),
+			}
+		}
+	};
+
+	let file = normalize_file_path(path_part)?;
+	if !file.exists() {
+		return Err(RipdocError::InvalidTarget(format!(
+			"Raw source file not found: {}",
+			file.display()
+		)));
+	}
+
+	if let (Some(start), Some(end)) = (start_line, end_line) {
+		if start == 0 || end == 0 {
+			return Err(RipdocError::InvalidTarget(
+				"Raw source line numbers are 1-based (must be >= 1)".to_string(),
+			));
+		}
+		if start > end {
+			return Err(RipdocError::InvalidTarget(format!(
+				"Raw source line range is invalid: start ({start}) > end ({end})",
+			)));
+		}
+	}
+
+	Ok(SkeleRawSource {
+		file,
+		start_line,
+		end_line,
+	})
+}
+
+fn normalize_file_path(path_str: &str) -> Result<PathBuf> {
+	let path = PathBuf::from(path_str);
+	let abs = if path.is_relative() {
+		std::path::absolute(&path).map_err(|err| {
+			RipdocError::InvalidTarget(format!(
+				"Failed to resolve raw source path '{}': {err}",
+				path.display()
+			))
+		})?
+	} else {
+		path
+	};
+	Ok(abs)
 }

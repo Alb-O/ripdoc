@@ -7,7 +7,7 @@ use crate::core_api::search::{SearchResult, SearchIndex, build_render_selection,
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
 
-use super::state::{SkeleState, SkeleEntry};
+use super::state::{SkeleEntry, SkeleRawSource, SkeleState};
 use super::resolver::{resolve_best_path_match, resolve_impl_target};
 use super::SkeleGroup;
 
@@ -25,14 +25,57 @@ pub fn ensure_markdown_block_sep(out: &mut String) {
 	}
 }
 
-impl SkeleState {
-	/// Rebuilds the skeleton file from scratch using all stored entries.
-	pub fn rebuild(&self, ripdoc: &Ripdoc) -> Result<()> {
-		let output_path = self
-			.output_path
-			.clone()
-			.unwrap_or_else(|| PathBuf::from("skeleton.md"));
+fn render_raw_source(out: &mut String, raw: &SkeleRawSource) -> Result<()> {
+	let content = fs::read_to_string(&raw.file)?;
+	let lines: Vec<&str> = content.lines().collect();
 
+	let (start_line, end_line) = match (raw.start_line, raw.end_line) {
+		(Some(start), Some(end)) => (start, end),
+		_ => (1usize, lines.len().max(1)),
+	};
+
+	let total_lines = lines.len();
+	if total_lines == 0 {
+		out.push_str(&format!("### Raw source: {}\n\n```rust\n```\n", raw.file.display()));
+		return Ok(());
+	}
+
+	if start_line == 0 || end_line == 0 {
+		return Err(crate::core_api::error::RipdocError::InvalidTarget(
+			"Raw source line numbers are 1-based (must be >= 1)".to_string(),
+		));
+	}
+	if start_line > end_line {
+		return Err(crate::core_api::error::RipdocError::InvalidTarget(format!(
+			"Raw source line range is invalid: start ({start_line}) > end ({end_line})",
+		)));
+	}
+	if start_line > total_lines {
+		return Err(crate::core_api::error::RipdocError::InvalidTarget(format!(
+			"Raw source start line {start_line} exceeds file length ({total_lines} lines): {}",
+			raw.file.display(),
+		)));
+	}
+	let end_line = end_line.min(total_lines);
+
+	out.push_str(&format!(
+		"### Raw source: {}:{start_line}:{end_line}\n\n",
+		raw.file.display()
+	));
+	out.push_str("```rust\n");
+	for (idx, line) in lines[(start_line - 1)..end_line].iter().enumerate() {
+		out.push_str(line);
+		if idx + 1 != end_line - (start_line - 1) {
+			out.push('\n');
+		}
+	}
+	out.push_str("\n```\n");
+	Ok(())
+}
+
+impl SkeleState {
+	/// Build the final markdown output without writing it.
+	pub fn build_output(&self, ripdoc: &Ripdoc) -> Result<String> {
 		// Pre-load all crates to avoid redundant work.
 		let mut crates_data: HashMap<PathBuf, rustdoc_types::Crate> = HashMap::new();
 
@@ -91,6 +134,9 @@ impl SkeleState {
 				SkeleEntry::Injection(i) => {
 					grouped_entries.push(SkeleGroup::Injection(i.content.clone()));
 				}
+				SkeleEntry::RawSource(raw) => {
+					grouped_entries.push(SkeleGroup::RawSource(raw.clone()));
+				}
 			}
 		}
 
@@ -102,6 +148,11 @@ impl SkeleState {
 				SkeleGroup::Injection(content) => {
 					ensure_markdown_block_sep(&mut final_output);
 					final_output.push_str(&content);
+					ensure_markdown_block_sep(&mut final_output);
+				}
+				SkeleGroup::RawSource(raw) => {
+					ensure_markdown_block_sep(&mut final_output);
+					render_raw_source(&mut final_output, &raw)?;
 					ensure_markdown_block_sep(&mut final_output);
 				}
 				SkeleGroup::Targets { pkg_root, targets } => {
@@ -321,7 +372,17 @@ impl SkeleState {
 		if had_errors {
 			eprintln!("Completed with errors; output may be incomplete.");
 		}
-		fs::write(&output_path, final_output)?;
+		Ok(final_output)
+	}
+
+	/// Rebuilds the skeleton file from scratch using all stored entries.
+	pub fn rebuild(&self, ripdoc: &Ripdoc) -> Result<()> {
+		let output_path = self
+			.output_path
+			.clone()
+			.unwrap_or_else(|| PathBuf::from("skeleton.md"));
+		let output = self.build_output(ripdoc)?;
+		fs::write(&output_path, output)?;
 		Ok(())
 	}
 }

@@ -5,6 +5,17 @@ use crate::core_api::search::{SearchDomain, SearchIndex, SearchItemKind, SearchO
 use crate::core_api::{Result, Ripdoc};
 use super::state::SkeleEntry;
 
+#[derive(Debug, Clone)]
+/// Extra details discovered while validating a skelebuild add target.
+pub struct ValidatedTargetInfo {
+	/// Canonical path that rustdoc search matched.
+	pub matched_path: String,
+	/// Best-effort source location (`path:line`) when available.
+	pub source_location: Option<String>,
+	/// Best-effort span line count when available.
+	pub span_line_count: Option<usize>,
+}
+
 /// Normalize a target specification for persistent storage.
 ///
 /// If the target is a relative path, it is converted to an absolute path to ensure
@@ -173,10 +184,14 @@ pub fn resolve_impl_target(
 }
 
 /// Validate that a target specification can be resolved against its crate.
-pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Result<()> {
+pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Result<ValidatedTargetInfo> {
 	let parsed = crate::cargo_utils::target::Target::parse(target_spec)?;
 	if parsed.path.is_empty() {
-		return Ok(());
+		return Ok(ValidatedTargetInfo {
+			matched_path: target_spec.to_string(),
+			source_location: None,
+			span_line_count: None,
+		});
 	}
 
 	let base_query = match &parsed.entrypoint {
@@ -226,33 +241,85 @@ pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Resul
 		resolve_span_path(span).starts_with(&pkg_root)
 	};
 
-	let found = resolve_best_path_match(
+	let mut matched_path: Option<String> = None;
+	let mut matched_id: Option<rustdoc_types::Id> = None;
+	if let Some(best) = resolve_best_path_match(
 		&index,
 		crate_name.as_deref(),
 		&pkg_root,
 		&base_query,
 		&is_local,
-	)
-	.is_some()
-		|| resolve_impl_target(
-			&index,
-			&crate_data,
-			crate_name.as_deref(),
-			&pkg_root,
-			&base_query,
-			&is_local,
-		)
-		.is_some();
+	) {
+		matched_path = Some(best.path_string);
+		matched_id = Some(best.item_id);
+	} else if let Some((_ty_match, impl_id)) = resolve_impl_target(
+		&index,
+		&crate_data,
+		crate_name.as_deref(),
+		&pkg_root,
+		&base_query,
+		&is_local,
+	) {
+		matched_path = Some(base_query.clone());
+		matched_id = Some(impl_id);
+	}
 
-	if !found {
+	let Some(matched_id) = matched_id else {
+		let last_segment = base_query.rsplit("::").next().unwrap_or(&base_query);
+		let mut options = SearchOptions::new(last_segment);
+		options.domains = SearchDomain::PATHS | SearchDomain::NAMES;
+		options.include_private = true;
+		let mut results = index.search(&options);
+		results.retain(|r| is_local(r));
+		results.sort_by_key(|r| r.path_string.len());
+		results.truncate(5);
+		let suggestions = results
+			.iter()
+			.map(|r| r.path_string.as_str())
+			.collect::<Vec<_>>()
+			.join("\n  - ");
+		let suggestions = if suggestions.is_empty() {
+			String::new()
+		} else {
+			format!("\nDid you mean:\n  - {suggestions}")
+		};
 		return Err(RipdocError::InvalidTarget(format!(
-			"No path match found for `{base_query}` in `{}`. Tip: run `ripdoc list {}` with `--search ... --search-spec path` and use the exact path.",
+			"No path match found for `{base_query}` in `{}`.{suggestions}\nTip: run `ripdoc list {}` with `--search ... --search-spec path` and use the exact path.",
 			pkg_root.display(),
 			pkg_root.display(),
 		)));
-	}
+	};
+	let matched_path = matched_path.unwrap_or_else(|| base_query.clone());
 
-	Ok(())
+	let (source_location, span_line_count) = crate_data
+		.index
+		.get(&matched_id)
+		.and_then(|item| item.span.as_ref())
+		.map(|span| {
+			let mut display_path = span.filename.clone();
+			if display_path.is_relative() {
+				display_path = resolve_span_path(span);
+			}
+			let display_path = display_path
+				.strip_prefix(&pkg_root)
+				.map(|p| p.display().to_string())
+				.unwrap_or_else(|_| display_path.display().to_string());
+			let begin_line = span.begin.0;
+			let end_line = span.end.0;
+			let line_count = if begin_line > 0 && end_line >= begin_line {
+				Some(end_line - begin_line + 1)
+			} else {
+				None
+			};
+			(Some(format!("{display_path}:{begin_line}")), line_count)
+		})
+		.unwrap_or((None, None));
+
+	Ok(ValidatedTargetInfo {
+		matched_path,
+		source_location,
+		span_line_count,
+	})
 }
 
 /// Unescape backslash sequences in injection content (e.g., `\n` to newline).

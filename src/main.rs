@@ -201,9 +201,9 @@ enum SkelebuildSubcommand {
 		/// Target to add.
 		target: String,
 
-		/// Optional item path to add (uses path-search mode).
+		/// Item paths to add (uses path-search mode when present).
 		#[arg(value_name = "ITEM")]
-		item: Option<String>,
+		items: Vec<String>,
 
 		/// Include the elided source implementation for this item.
 		#[arg(long, default_value_t = false)]
@@ -224,6 +224,15 @@ enum SkelebuildSubcommand {
 		/// Plain output (skip module nesting).
 		#[arg(long)]
 		plain: bool,
+	},
+	/// Add an arbitrary raw source snippet by file and line range.
+	AddRaw {
+		/// Raw source spec: `/path/to/file.rs[:start[:end]]` (1-based lines).
+		spec: String,
+
+		/// Output file for the skeleton.
+		#[arg(short = 'O', long)]
+		output: Option<std::path::PathBuf>,
 	},
 	/// Update an existing target entry.
 	Update {
@@ -251,7 +260,16 @@ enum SkelebuildSubcommand {
 	/// Inject manual commentary.
 	Inject {
 		/// Text to inject.
-		content: String,
+		#[arg(required_unless_present_any = ["from_stdin", "from_file"])]
+		content: Option<String>,
+
+		/// Read injection content from stdin.
+		#[arg(long, default_value_t = false, conflicts_with = "from_file")]
+		from_stdin: bool,
+
+		/// Read injection content from a file.
+		#[arg(long, value_name = "PATH", conflicts_with = "from_stdin")]
+		from_file: Option<std::path::PathBuf>,
 
 		/// Treat `\\n` / `\\t` as literal characters.
 		#[arg(long, default_value_t = false)]
@@ -298,6 +316,8 @@ enum SkelebuildSubcommand {
 	},
 	/// Show current targets and output path.
 	Status,
+	/// Preview the rebuilt output to stdout.
+	Preview,
 	/// Rebuild the output file without adding anything.
 	Rebuild,
 }
@@ -546,8 +566,14 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 	if listings.is_empty() {
 		if let Some(query) = trimmed_query {
 			println!("No matches found for \"{query}\".");
+			if !common.private {
+				println!("Tip: pass `--private` to include private items.");
+			}
 		} else {
 			println!("No items found.");
+			if !common.private {
+				println!("Tip: pass `--private` to include private items.");
+			}
 		}
 		return Ok(());
 	}
@@ -857,35 +883,58 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						print!("{}", include_str!("skelebuild/agents_skelebuild.md"));
 						return Ok(());
 					}
-					SkelebuildSubcommand::Add {
-						target,
-						item,
-						implementation,
-						raw_source,
-						no_validate,
-						output: o,
-						plain: p,
-					} => {
-						if o.is_some() {
-							output = o;
-						}
-						if p {
-							plain = p;
-						}
-						let target = if let Some(item) = item {
-							format!("{target}::{item}")
-						} else {
-							target
-						};
-						let validate = !no_validate;
+				SkelebuildSubcommand::Add {
+					target,
+					items,
+					implementation,
+					raw_source,
+					no_validate,
+					output: o,
+					plain: p,
+				} => {
+					if o.is_some() {
+						output = o;
+					}
+					if p {
+						plain = p;
+					}
+
+					let validate = !no_validate;
+					let target_prefix = target.clone();
+					let targets: Vec<String> = if items.is_empty() {
+						vec![target]
+					} else {
+						items
+							.into_iter()
+							.map(|item| format!("{target_prefix}::{item}"))
+							.collect()
+					};
+
+					if targets.len() == 1 {
 						Some(SkeleAction::Add {
-							target,
+							target: targets[0].clone(),
+							implementation,
+							raw_source,
+							validate,
+						})
+					} else {
+						Some(SkeleAction::AddMany {
+							targets,
 							implementation,
 							raw_source,
 							validate,
 						})
 					}
-					SkelebuildSubcommand::Update {
+				}
+
+				SkelebuildSubcommand::AddRaw { spec, output: o } => {
+					if o.is_some() {
+						output = o;
+					}
+					Some(SkeleAction::AddRaw { spec })
+				}
+				SkelebuildSubcommand::Update {
+
 						spec,
 						implementation,
 						no_implementation,
@@ -916,27 +965,42 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							raw_source: raw_value,
 						})
 					}
-					SkelebuildSubcommand::Inject {
+				SkelebuildSubcommand::Inject {
+					content,
+					from_stdin,
+					from_file,
+					literal,
+					after,
+					after_target,
+					before_target,
+					at,
+					output: o,
+				} => {
+					if o.is_some() {
+						output = o;
+					}
+
+					let content = if from_stdin {
+						use std::io::Read;
+						let mut buf = String::new();
+						std::io::stdin().read_to_string(&mut buf)?;
+						buf
+					} else if let Some(path) = from_file {
+						std::fs::read_to_string(path)?
+					} else {
+						content.unwrap_or_default()
+					};
+
+					Some(SkeleAction::Inject {
 						content,
 						literal,
 						after,
 						after_target,
 						before_target,
 						at,
-						output: o,
-					} => {
-						if o.is_some() {
-							output = o;
-						}
-						Some(SkeleAction::Inject {
-							content,
-							literal,
-							after,
-							after_target,
-							before_target,
-							at,
-						})
-					}
+					})
+				}
+
 					SkelebuildSubcommand::Remove { target, output: o } => {
 						if o.is_some() {
 							output = o;
@@ -952,8 +1016,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Reset)
 					}
-					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
-					SkelebuildSubcommand::Rebuild => Some(SkeleAction::Rebuild),
+				SkelebuildSubcommand::Status => Some(SkeleAction::Status),
+				SkelebuildSubcommand::Preview => Some(SkeleAction::Preview),
+				SkelebuildSubcommand::Rebuild => Some(SkeleAction::Rebuild),
+
 				}
 			} else {
 				None
