@@ -183,6 +183,10 @@ struct SkelebuildArgs {
 	#[arg(long)]
 	plain: bool,
 
+	/// Print full skelebuild state after the command.
+	#[arg(long = "show-state", default_value_t = false)]
+	show_state: bool,
+
 	#[command(flatten)]
 	/// Common arguments for configuring Ripdoc.
 	common: CommonArgs,
@@ -220,12 +224,20 @@ enum SkelebuildSubcommand {
 		/// Text to inject.
 		content: String,
 
-		/// Inject after this target (by path or content prefix).
-		#[arg(long, conflicts_with = "at")]
+		/// Inject after this entry (target path or injection content prefix).
+		#[arg(long, conflicts_with_all = ["at", "after_target", "before_target"])]
 		after: Option<String>,
 
+		/// Inject after a matching target (recommended).
+		#[arg(long, conflicts_with_all = ["at", "after", "before_target"])]
+		after_target: Option<String>,
+
+		/// Inject before a matching target.
+		#[arg(long, conflicts_with_all = ["at", "after", "after_target"])]
+		before_target: Option<String>,
+
 		/// Inject at this numeric index (0-based, use `status` to see indices).
-		#[arg(long, conflicts_with = "after")]
+		#[arg(long, conflicts_with_all = ["after", "after_target", "before_target"])]
 		at: Option<usize>,
 
 		/// Output file for the skeleton.
@@ -830,13 +842,21 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 					SkelebuildSubcommand::Inject {
 						content,
 						after,
+						after_target,
+						before_target,
 						at,
 						output: o,
 					} => {
 						if o.is_some() {
 							output = o;
 						}
-						Some(SkeleAction::Inject { content, after, at })
+						Some(SkeleAction::Inject {
+							content,
+							after,
+							after_target,
+							before_target,
+							at,
+						})
 					}
 					SkelebuildSubcommand::Remove { target, output: o } => {
 						if o.is_some() {
@@ -860,7 +880,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				None
 			};
 
-			ripdoc::skelebuild::run_skelebuild(action, output, plain, &rs)?;
+			ripdoc::skelebuild::run_skelebuild(action, output, plain, args.show_state, &rs)?;
 			Ok(())
 		}
 

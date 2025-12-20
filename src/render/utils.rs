@@ -178,5 +178,67 @@ pub fn extract_source(
 	}
 
 	let result = extracted.join("\n");
-	Ok(result)
+	Ok(sanitize_extracted_snippet(&result))
+}
+
+fn sanitize_extracted_snippet(snippet: &str) -> String {
+	// Spans can occasionally slice through attribute-heavy blocks (e.g. derived impls),
+	// producing snippets that start or end with a standalone attribute.
+	// That output is frustrating to work with and can trigger errors like:
+	// "expected item after attributes".
+	let mut lines: Vec<String> = snippet.lines().map(|l| l.to_string()).collect();
+
+	// Comment out trailing standalone attributes.
+	while let Some(last) = lines.last() {
+		let trimmed = last.trim();
+		if trimmed.is_empty() {
+			lines.pop();
+			continue;
+		}
+		if trimmed.starts_with("#") {
+			let line = lines.pop().unwrap();
+			lines.push(format!("// {line}"));
+		}
+		break;
+	}
+
+	// Comment out leading standalone attributes when no item follows soon.
+	let mut first_nonblank = 0usize;
+	while first_nonblank < lines.len() && lines[first_nonblank].trim().is_empty() {
+		first_nonblank += 1;
+	}
+	if first_nonblank < lines.len() && lines[first_nonblank].trim().starts_with('#') {
+		let lookahead = 8usize;
+		let mut has_item = false;
+		for line in lines.iter().skip(first_nonblank).take(lookahead) {
+			let trimmed = line.trim_start();
+			if trimmed.is_empty() || trimmed.starts_with('#') {
+				continue;
+			}
+			let starts_item = trimmed.starts_with("pub ")
+				|| trimmed.starts_with("impl ")
+				|| trimmed.starts_with("fn ")
+				|| trimmed.starts_with("struct ")
+				|| trimmed.starts_with("enum ")
+				|| trimmed.starts_with("trait ")
+				|| trimmed.starts_with("type ")
+				|| trimmed.starts_with("const ")
+				|| trimmed.starts_with("static ")
+				|| trimmed.starts_with("use ")
+				|| trimmed.starts_with("mod ");
+			has_item = starts_item;
+			break;
+		}
+		if !has_item {
+			for line in &mut lines[first_nonblank..] {
+				if line.trim().starts_with('#') {
+					*line = format!("// {}", line);
+				} else if !line.trim().is_empty() {
+					break;
+				}
+			}
+		}
+	}
+
+	lines.join("\n")
 }

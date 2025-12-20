@@ -17,9 +17,11 @@ ripdoc skelebuild add bat::controller::Controller::run --implementation
 # Or: add literal file content for the containing file
 # ripdoc skelebuild add bat::config::Config --raw-source
 
-# Insert your own notes (use status to find indices)
+# Insert your own notes (prefer target-relative insertion)
+ripdoc skelebuild inject '## Notes\nWhy this matters...' --after-target bat::config::Config
+
+# Show indices / full state when needed
 ripdoc skelebuild status
-ripdoc skelebuild inject '## Notes\nWhy this matters...' --at 1
 
 # Remove entries by exact target/content
 ripdoc skelebuild remove bat::assets::get_acknowledgements
@@ -30,8 +32,8 @@ ripdoc skelebuild rebuild
 
 ## Tips
 
-- Prefer `inject --at <index>`; `--after <prefix>` is convenience-only and can be ambiguous.
-- `status` is read-only (it won’t rewrite your output file).
+- Prefer `inject --after-target <spec>`; `--at <index>` works but indices shift as you insert.
+- `status` is read-only (it won’t rewrite your output file); pass `--show-state` to print the full state after other commands.
 - `--implementation` includes method/function bodies when available; non-callables still render as a skeleton for context.
 - If a target can’t be resolved or a source file can’t be read, rebuild writes a visible Markdown warning block (`> [!ERROR] ...`) so missing code isn’t silent.
 
@@ -40,13 +42,14 @@ ripdoc skelebuild rebuild
 For local targets, the `crate::...` prefix comes from rustdoc.
 
 - For bin crates, that prefix is often the *bin name*, not the folder/package name.
+- You can usually omit the crate prefix and use a suffix path (e.g. `terminal_panel::TerminalState`).
 - If you’re not sure, discover paths first:
 
 ```bash
 ripdoc list ./path/to/crate --search TerminalState --search-spec path
 ```
 
-`skelebuild` also tries a couple of path fallbacks when it can (e.g. stripping/replacing a mismatched prefix), but using the `list` output is the most reliable.
+`skelebuild` tries some path fallbacks (e.g. stripping/replacing a mismatched crate prefix) and prefers matches whose source lives in the target crate. For maximum precision, use the exact `crate::...` path from `list`.
 
 ## Positional item mode
 

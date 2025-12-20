@@ -6,6 +6,45 @@ use super::state::{GapController, RenderState};
 use super::syntax::*;
 use super::utils::{escape_path, must_get, ppush};
 
+fn extracted_source_looks_like_item(item: &Item, source: &str) -> bool {
+	fn first_code_line(source: &str) -> Option<&str> {
+		for line in source.lines() {
+			let trimmed = line.trim_start();
+			if trimmed.is_empty() {
+				continue;
+			}
+			if trimmed.starts_with("//") || trimmed.starts_with("/*") {
+				continue;
+			}
+			if trimmed.starts_with('#') {
+				continue;
+			}
+			return Some(trimmed);
+		}
+		None
+	}
+
+	let Some(line) = first_code_line(source) else {
+		return false;
+	};
+
+	match &item.inner {
+		ItemEnum::Function(_) => line.contains("fn "),
+		ItemEnum::Impl(_) => line.starts_with("impl ") || line.starts_with("unsafe impl "),
+		ItemEnum::Struct(_) => line.contains("struct "),
+		ItemEnum::Enum(_) => line.contains("enum "),
+		ItemEnum::Trait(_) => line.contains("trait "),
+		ItemEnum::TypeAlias(_) => line.contains("type "),
+		ItemEnum::Constant { .. } => line.contains("const "),
+		ItemEnum::Static(_) => line.contains("static "),
+		ItemEnum::Use(_) => line.contains("use "),
+		ItemEnum::Module(_) => line.contains("mod "),
+		ItemEnum::Macro(_) => line.contains("macro_rules!") || line.contains("macro "),
+		ItemEnum::ProcMacro(_) => true,
+		_ => true,
+	}
+}
+
 /// Captures how the current selection affects an item's children.
 pub(crate) struct SelectionView {
 	active: bool,
@@ -184,8 +223,10 @@ pub fn render_item(
 			if let Ok(source) =
 				super::utils::extract_source(span, state.config.source_root.as_deref())
 			{
-				state.visited.insert(item.id.clone());
-				return format!("{source}\n\n");
+				if extracted_source_looks_like_item(item, &source) {
+					state.visited.insert(item.id.clone());
+					return format!("{source}\n\n");
+				}
 			}
 		}
 	}
@@ -741,7 +782,9 @@ fn is_visible(state: &RenderState, item: &Item) -> bool {
 /// Render a function or method signature.
 fn render_function_item(state: &RenderState, item: &Item, is_trait_method: bool) -> String {
 	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref())
+			&& extracted_source_looks_like_item(item, &source)
+		{
 			return format!("{source}\n\n");
 		}
 	}
@@ -785,7 +828,9 @@ fn render_function_item(state: &RenderState, item: &Item, is_trait_method: bool)
 /// Render a constant definition.
 fn render_constant_item(state: &RenderState, item: &Item) -> String {
 	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref())
+			&& extracted_source_looks_like_item(item, &source)
+		{
 			return format!("{source}\n\n");
 		}
 	}
@@ -807,7 +852,9 @@ fn render_constant_item(state: &RenderState, item: &Item) -> String {
 /// Render a type alias with generics, bounds, and visibility.
 fn render_type_alias_item(state: &RenderState, item: &Item) -> String {
 	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref())
+			&& extracted_source_looks_like_item(item, &source)
+		{
 			return format!("{source}\n\n");
 		}
 	}

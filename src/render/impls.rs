@@ -4,6 +4,37 @@ use super::state::{GapController, RenderState};
 use super::syntax::*;
 use super::utils::ppush;
 
+fn extracted_source_looks_like_item(item: &Item, source: &str) -> bool {
+	fn first_code_line(source: &str) -> Option<&str> {
+		for line in source.lines() {
+			let trimmed = line.trim_start();
+			if trimmed.is_empty() {
+				continue;
+			}
+			if trimmed.starts_with("//") || trimmed.starts_with("/*") {
+				continue;
+			}
+			if trimmed.starts_with('#') {
+				continue;
+			}
+			return Some(trimmed);
+		}
+		None
+	}
+
+	let Some(line) = first_code_line(source) else {
+		return false;
+	};
+
+	match &item.inner {
+		ItemEnum::Function(_) => line.contains("fn "),
+		ItemEnum::Constant { .. } => line.contains("const "),
+		ItemEnum::AssocType { .. } => line.contains("type "),
+		ItemEnum::TypeAlias(_) => line.contains("type "),
+		_ => true,
+	}
+}
+
 /// Traits that we render via `#[derive(...)]` annotations instead of explicit impl blocks.
 pub const DERIVE_TRAITS: &[&str] = &[
 	"Clone",
@@ -155,6 +186,7 @@ pub fn render_impl_item(
 		if let Some(span) = &item.span {
 			if let Ok(source) =
 				super::utils::extract_source(span, state.config.source_root.as_deref())
+				&& extracted_source_looks_like_item(item, &source)
 			{
 				return format!("{source}\n\n");
 			}

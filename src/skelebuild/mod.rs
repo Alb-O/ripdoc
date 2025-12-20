@@ -39,6 +39,48 @@ fn normalize_target_spec_for_storage(target: &str) -> String {
 	}
 }
 
+fn target_entry_matches_spec(stored_target: &str, spec: &str) -> bool {
+	let spec = spec.trim();
+	if spec.is_empty() {
+		return false;
+	}
+
+	if stored_target == spec {
+		return true;
+	}
+
+	// For path-based entries stored as "/abs/path/to/crate::item::path",
+	// treat `spec` as an item-path matcher by default.
+	let stored_item = stored_target
+		.split_once("::")
+		.map(|(_, item)| item)
+		.unwrap_or(stored_target);
+
+	stored_item == spec || stored_item.ends_with(&format!("::{spec}")) || stored_item.contains(spec)
+}
+
+fn find_target_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
+	let mut matches: Vec<usize> = Vec::new();
+	for (idx, entry) in entries.iter().enumerate() {
+		let SkeleEntry::Target(t) = entry else {
+			continue;
+		};
+		if target_entry_matches_spec(&t.path, spec) {
+			matches.push(idx);
+		}
+	}
+
+	match matches.as_slice() {
+		[] => Err(RipdocError::InvalidTarget(format!(
+			"No target matches '{spec}'. Use `ripdoc skelebuild status` to see indices.",
+		))),
+		[only] => Ok(*only),
+		_ => Err(RipdocError::InvalidTarget(format!(
+			"Ambiguous target match '{spec}': matches entries {matches:?}. Use `inject --at <index>`.",
+		))),
+	}
+}
+
 /// State of an ongoing skeleton build.
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct SkeleState {
@@ -210,6 +252,36 @@ impl SkeleState {
 						.get(&crate_data.root)
 						.and_then(|root| root.name.clone());
 
+					let resolve_span_path = |span: &rustdoc_types::Span| -> PathBuf {
+						let mut path = span.filename.clone();
+						if path.is_relative() {
+							let joined = pkg_root.join(&path);
+							if joined.exists() {
+								path = joined;
+							} else {
+								let mut components = span.filename.components();
+								while components.next().is_some() {
+									let candidate = pkg_root.join(components.as_path());
+									if candidate.exists() {
+										path = candidate;
+										break;
+									}
+								}
+							}
+						}
+						path.canonicalize().unwrap_or(path)
+					};
+
+					let is_local = |result: &SearchResult| -> bool {
+						let Some(item) = crate_data.index.get(&result.item_id) else {
+							return false;
+						};
+						let Some(span) = &item.span else {
+							return false;
+						};
+						resolve_span_path(span).starts_with(&pkg_root)
+					};
+
 					for target in targets {
 						let parsed = crate::cargo_utils::target::Target::parse(&target.path);
 						let base_query = match parsed {
@@ -252,20 +324,57 @@ impl SkeleState {
 						}
 						candidates.dedup();
 
-						let mut resolved_query: Option<String> = None;
-						let mut resolved_results = Vec::new();
+						let mut resolved: Option<SearchResult> = None;
 						for candidate in &candidates {
 							let mut options = SearchOptions::new(candidate);
 							options.domains = SearchDomain::PATHS;
-							let results = index.search(&options);
-							if !results.is_empty() {
-								resolved_query = Some(candidate.clone());
-								resolved_results = results;
-								break;
+							let mut results = index.search(&options);
+							if candidate.contains("::") {
+								results.retain(|r| {
+									r.path_string == *candidate
+										|| r.path_string.ends_with(&format!("::{candidate}"))
+								});
 							}
+
+							let mut local: Vec<SearchResult> =
+								results.iter().cloned().filter(|r| is_local(r)).collect();
+							let pool = if !local.is_empty() {
+								&mut local
+							} else {
+								&mut results
+							};
+							if pool.is_empty() {
+								continue;
+							}
+
+							pool.sort_by_key(|r| {
+								(
+									!is_local(r),
+									match r.kind {
+										SearchItemKind::Struct
+										| SearchItemKind::Enum
+										| SearchItemKind::Trait
+										| SearchItemKind::TypeAlias
+										| SearchItemKind::Function
+										| SearchItemKind::Method => 0usize,
+										SearchItemKind::Module => 1usize,
+										_ => 2usize,
+									},
+									r.path_string.len(),
+								)
+							});
+							if pool.len() > 1 {
+								warnings.push(format!(
+									"> [!WARNING] Ambiguous match for `{}`; using `{}`",
+									candidate,
+									pool[0].path_string
+								));
+							}
+							resolved = Some(pool[0].clone());
+							break;
 						}
 
-						let Some(_resolved_query) = resolved_query else {
+						let Some(base) = resolved else {
 							warnings.push(format!(
 								"> [!WARNING] No matches found for: `{}`",
 								candidates.join("`, `")
@@ -273,26 +382,37 @@ impl SkeleState {
 							continue;
 						};
 
+						selection_results.push(base.clone());
+
 						if target.raw_source {
-							for res in resolved_results {
-								if let Some(item) = crate_data.index.get(&res.item_id) {
-									if let Some(span) = &item.span {
-										raw_files.insert(span.filename.clone());
+							if let Some(item) = crate_data.index.get(&base.item_id)
+								&& let Some(span) = &item.span
+							{
+								raw_files.insert(span.filename.clone());
+							}
+						}
+
+						if target.implementation {
+							if matches!(base.kind, SearchItemKind::Function | SearchItemKind::Method) {
+								full_source.insert(base.item_id);
+							} else {
+								let prefix = format!("{}::", base.path_string);
+								for entry in index.entries() {
+									if !entry.path_string.starts_with(&prefix) {
+										continue;
+									}
+									if !is_local(entry) {
+										continue;
+									}
+									selection_results.push(entry.clone());
+									if matches!(
+										entry.kind,
+										SearchItemKind::Function | SearchItemKind::Method
+									) {
+										full_source.insert(entry.item_id);
 									}
 								}
 							}
-						} else if target.implementation {
-							for res in &resolved_results {
-								match res.kind {
-									SearchItemKind::Function | SearchItemKind::Method => {
-										full_source.insert(res.item_id);
-									}
-									_ => {}
-								}
-							}
-							selection_results.extend(resolved_results);
-						} else {
-							selection_results.extend(resolved_results);
 						}
 					}
 
@@ -389,6 +509,10 @@ pub enum SkeleAction {
 		content: String,
 		/// Optional target path/content prefix to inject after.
 		after: Option<String>,
+		/// Inject after a matching target entry.
+		after_target: Option<String>,
+		/// Inject before a matching target entry.
+		before_target: Option<String>,
 		/// Optional numeric index (0-based) to insert at.
 		at: Option<usize>,
 	},
@@ -407,6 +531,7 @@ pub fn run_skelebuild(
 	action: Option<SkeleAction>,
 	output: Option<PathBuf>,
 	plain: bool,
+	show_state: bool,
 	ripdoc: &Ripdoc,
 ) -> Result<()> {
 	let mut state = SkeleState::load();
@@ -427,6 +552,8 @@ pub fn run_skelebuild(
 	if plain {
 		state.plain = true;
 	}
+
+	let show_state_on_exit = show_state || matches!(action.as_ref(), Some(SkeleAction::Status));
 
 	let mut should_rebuild = false;
 	match action {
@@ -454,7 +581,13 @@ pub fn run_skelebuild(
 				);
 			}
 		}
-		Some(SkeleAction::Inject { content, after, at }) => {
+		Some(SkeleAction::Inject {
+			content,
+			after,
+			after_target,
+			before_target,
+			at,
+		}) => {
 			should_rebuild = true;
 			let injection = SkeleEntry::Injection(SkeleInjection { content });
 			if let Some(index) = at {
@@ -466,6 +599,15 @@ pub fn run_skelebuild(
 				}
 				state.entries.insert(index, injection);
 				println!("Injected commentary at index {index}.");
+			} else if let Some(spec) = before_target {
+				let index = find_target_match(&state.entries, &spec)?;
+				state.entries.insert(index, injection);
+				println!("Injected commentary before target at entry #{index}.");
+			} else if let Some(spec) = after_target {
+				let index = find_target_match(&state.entries, &spec)?;
+				let insert_at = index + 1;
+				state.entries.insert(insert_at, injection);
+				println!("Injected commentary after target at entry #{index}.");
 			} else if let Some(after_key) = after {
 				let after_key = after_key.trim().to_string();
 				let after_upper = after_key.to_uppercase();
@@ -476,7 +618,9 @@ pub fn run_skelebuild(
 					let mut matches: Vec<usize> = Vec::new();
 					for (idx, entry) in state.entries.iter().enumerate() {
 						let is_match = match entry {
-							SkeleEntry::Target(t) => t.path == after_key || t.path.starts_with(&after_key),
+							SkeleEntry::Target(t) => {
+								t.path == after_key || t.path.starts_with(&after_key)
+							}
 							SkeleEntry::Injection(i) => {
 								i.content == after_key || i.content.starts_with(&after_key)
 							}
@@ -546,32 +690,38 @@ pub fn run_skelebuild(
 		.output_path
 		.clone()
 		.unwrap_or_else(|| PathBuf::from("skeleton.md"));
-	println!("Skeleton state:");
-	println!("  State file: {}", SkeleState::state_file().display());
-	println!("  Output: {}", output_path.display());
-	println!("  Plain mode: {}", state.plain);
-	println!("  Entries: {}", state.entries.len());
-	println!("  Tip: use `inject --at <index>` to avoid brittle matching.");
-	println!("  Entry list:");
-	for (idx, e) in state.entries.iter().enumerate() {
-		match e {
-			SkeleEntry::Target(t) => {
-				println!(
-					"    {idx}: [Target] {} (impl: {}, raw: {})",
-					t.path, t.implementation, t.raw_source
-				)
-			}
-			SkeleEntry::Injection(i) => {
-				let trimmed = i.content.trim();
-				let compact = trimmed.replace('\n', "\\n");
-				let summary = if compact.len() > 80 {
-					format!("{}...", &compact[..77])
-				} else {
-					compact
-				};
-				println!("    {idx}: [Inject] {summary}");
+
+	let show_full_state = show_state_on_exit;
+	if show_full_state {
+		println!("Skeleton state:");
+		println!("  State file: {}", SkeleState::state_file().display());
+		println!("  Output: {}", output_path.display());
+		println!("  Plain mode: {}", state.plain);
+		println!("  Entries: {}", state.entries.len());
+		println!("  Tip: use `inject --at <index>` to avoid brittle matching.");
+		println!("  Entry list:");
+		for (idx, e) in state.entries.iter().enumerate() {
+			match e {
+				SkeleEntry::Target(t) => {
+					println!(
+						"    {idx}: [Target] {} (impl: {}, raw: {})",
+						t.path, t.implementation, t.raw_source
+					)
+				}
+				SkeleEntry::Injection(i) => {
+					let trimmed = i.content.trim();
+					let compact = trimmed.replace('\n', "\\n");
+					let summary = if compact.len() > 80 {
+						format!("{}...", &compact[..77])
+					} else {
+						compact
+					};
+					println!("    {idx}: [Inject] {summary}");
+				}
 			}
 		}
+	} else {
+		println!("Output: {} (entries: {})", output_path.display(), state.entries.len());
 	}
 
 	Ok(())
