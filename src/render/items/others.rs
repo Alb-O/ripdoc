@@ -1,17 +1,19 @@
 use rustdoc_types::{Item, ItemEnum};
+
 use super::super::state::RenderState;
 use super::super::syntax::*;
 use super::extracted_source_looks_like_item;
 
 /// Render a function or method signature.
 pub fn render_function_item(state: &RenderState, item: &Item, is_trait_method: bool) -> String {
-	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+		&& let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
 			&& extracted_source_looks_like_item(item, &source)
 		{
 			return format!("{source}\n\n");
 		}
-	}
 
 	let mut output = docs(item);
 	let function = extract_item!(item, ItemEnum::Function);
@@ -51,13 +53,14 @@ pub fn render_function_item(state: &RenderState, item: &Item, is_trait_method: b
 
 /// Render a constant definition.
 pub fn render_constant_item(state: &RenderState, item: &Item) -> String {
-	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+		&& let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
 			&& extracted_source_looks_like_item(item, &source)
 		{
 			return format!("{source}\n\n");
 		}
-	}
 
 	let mut output = docs(item);
 
@@ -75,13 +78,14 @@ pub fn render_constant_item(state: &RenderState, item: &Item) -> String {
 
 /// Render a type alias with generics, bounds, and visibility.
 pub fn render_type_alias_item(state: &RenderState, item: &Item) -> String {
-	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+		&& let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
 			&& extracted_source_looks_like_item(item, &source)
 		{
 			return format!("{source}\n\n");
 		}
-	}
 
 	let type_alias = extract_item!(item, ItemEnum::TypeAlias);
 	let mut output = docs(item);

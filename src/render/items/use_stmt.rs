@@ -1,4 +1,5 @@
 use rustdoc_types::{Id, Item, ItemEnum};
+
 use super::super::state::{GapController, RenderState};
 use super::super::syntax::*;
 use super::super::utils::escape_path;

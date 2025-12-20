@@ -1,19 +1,19 @@
-/// Persistent state and data structures for skelebuild.
-pub mod state;
+mod rebuild;
 /// Target resolution and validation logic.
 pub mod resolver;
-mod rebuild;
+/// Persistent state and data structures for skelebuild.
+pub mod state;
 
 use std::path::PathBuf;
-use crate::core_api::error::RipdocError;
-use crate::core_api::{Result, Ripdoc};
 
-pub use state::{SkeleAction, SkeleEntry, SkeleInjection, SkeleRawSource, SkeleState, SkeleTarget};
 pub use resolver::unescape_inject_content;
-
 use resolver::{
 	find_target_match, normalize_target_spec_for_storage, validate_add_target_or_error,
 };
+pub use state::{SkeleAction, SkeleEntry, SkeleInjection, SkeleRawSource, SkeleState, SkeleTarget};
+
+use crate::core_api::error::RipdocError;
+use crate::core_api::{Result, Ripdoc};
 
 pub(crate) enum SkeleGroup {
 	Targets {
@@ -374,10 +374,9 @@ pub fn run_skelebuild(
 			raw_source,
 		}) => {
 			let index = find_target_match(&state.entries, &spec)?;
-			let entry = state
-				.entries
-				.get_mut(index)
-				.ok_or_else(|| RipdocError::InvalidTarget(format!("Invalid entry index {index}")))?;
+			let entry = state.entries.get_mut(index).ok_or_else(|| {
+				RipdocError::InvalidTarget(format!("Invalid entry index {index}"))
+			})?;
 			let SkeleEntry::Target(target) = entry else {
 				return Err(RipdocError::InvalidTarget(format!(
 					"Entry #{index} matched '{spec}' but is not a target",
@@ -393,7 +392,8 @@ pub fn run_skelebuild(
 				target.raw_source = value;
 			}
 
-			let changed = target.implementation != prev_impl || target.raw_source != prev_raw_source;
+			let changed =
+				target.implementation != prev_impl || target.raw_source != prev_raw_source;
 			should_rebuild = config_changed || changed;
 			action_summary = Some(if changed {
 				format!(
@@ -417,8 +417,7 @@ pub fn run_skelebuild(
 				SkeleEntry::Target(t) => t.path != target_str,
 				SkeleEntry::Injection(i) => i.content != target_str,
 				SkeleEntry::RawSource(r) => {
-					raw_source_summary(r) != target_str
-						&& r.file.to_string_lossy() != target_str
+					raw_source_summary(r) != target_str && r.file.to_string_lossy() != target_str
 				}
 			});
 			let removed = before_len - state.entries.len();
@@ -437,7 +436,8 @@ pub fn run_skelebuild(
 			state.output_path = output.clone().or(prev_output);
 			state.plain = plain || prev_plain;
 			should_rebuild = true;
-			action_summary = Some("State reset (entries cleared, output/plain preserved).".to_string());
+			action_summary =
+				Some("State reset (entries cleared, output/plain preserved).".to_string());
 		}
 		Some(SkeleAction::Preview) => {
 			let rendered = state.build_output(ripdoc)?;
@@ -467,7 +467,10 @@ pub fn run_skelebuild(
 	let show_full_state = show_state_on_exit;
 	if show_full_state {
 		println!("Skeleton state:");
-		println!("  State file: {}", state::SkeleState::state_file().display());
+		println!(
+			"  State file: {}",
+			state::SkeleState::state_file().display()
+		);
 		println!("  Output: {}", output_path.display());
 		println!("  Plain mode: {}", state.plain);
 		println!("  Entries: {}", state.entries.len());
@@ -505,7 +508,11 @@ pub fn run_skelebuild(
 			state.entries.len()
 		);
 	} else {
-		println!("Output: {} (entries: {})", output_path.display(), state.entries.len());
+		println!(
+			"Output: {} (entries: {})",
+			output_path.display(),
+			state.entries.len()
+		);
 	}
 
 	Ok(())
@@ -522,7 +529,9 @@ fn raw_source_summary(raw: &SkeleRawSource) -> String {
 fn parse_raw_source_spec(spec: &str) -> Result<SkeleRawSource> {
 	let trimmed = spec.trim();
 	if trimmed.is_empty() {
-		return Err(RipdocError::InvalidTarget("Raw source spec is empty".to_string()));
+		return Err(RipdocError::InvalidTarget(
+			"Raw source spec is empty".to_string(),
+		));
 	}
 
 	let (path_part, start_line, end_line) = match trimmed.rsplit_once(':') {

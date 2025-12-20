@@ -1,4 +1,5 @@
 use rustdoc_types::{Item, ItemEnum};
+
 use super::super::state::{GapController, RenderState};
 use super::super::syntax::*;
 use super::super::utils::ppush;
@@ -6,13 +7,13 @@ use super::render_item;
 
 /// Render a module and its children.
 pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) -> String {
-	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) =
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
 		{
 			return format!("{source}\n\n");
 		}
-	}
 
 	let path_prefix = ppush(path_prefix, &render_name(item));
 
@@ -22,7 +23,9 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 	} else {
 		let mut head = format!("{}mod {} {{\n", render_vis(item), render_name(item));
 		// Add module doc comment if present
-		if state.should_module_doc(&path_prefix, item) && let Some(docs) = &item.docs {
+		if state.should_module_doc(&path_prefix, item)
+			&& let Some(docs) = &item.docs
+		{
 			for line in docs.lines() {
 				head.push_str(&format!("    //! {line}\n"));
 			}

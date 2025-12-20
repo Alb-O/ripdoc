@@ -37,7 +37,10 @@ impl<'a> SearchIndex<'a> {
 			let Some(use_item) = crate_data.index.get(&use_entry.item_id) else {
 				continue;
 			};
-			if !matches!(use_item.visibility, Visibility::Public | Visibility::Default) {
+			if !matches!(
+				use_item.visibility,
+				Visibility::Public | Visibility::Default
+			) {
 				continue;
 			}
 			let ItemEnum::Use(import) = &use_item.inner else {

@@ -1,4 +1,5 @@
 use rustdoc_types::{Id, Item, ItemEnum, VariantKind};
+
 use super::super::impls::{render_impl, should_render_impl};
 use super::super::state::{GapController, RenderState};
 use super::super::syntax::*;
@@ -55,8 +56,12 @@ pub fn render_enum(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 		return String::new();
 	}
 
-	let rendered_enum = if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		crate::render::utils::extract_source(span, state.config.source_root.as_deref()).ok().map(|s| format!("{s}\n\n"))
+	let rendered_enum = if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+	{
+		crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+			.ok()
+			.map(|s| format!("{s}\n\n"))
 	} else {
 		let mut output = docs(item);
 
@@ -131,11 +136,13 @@ fn render_enum_variant(
 	item: &Item,
 	include_all_fields: bool,
 ) -> String {
-	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = crate::render::utils::extract_source(span, state.config.source_root.as_deref()) {
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+		&& let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+		{
 			return format!("    {source},\n");
 		}
-	}
 
 	let mut output = docs(item);
 	let variant = extract_item!(item, ItemEnum::Variant);

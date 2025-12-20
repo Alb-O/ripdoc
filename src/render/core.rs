@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use crate::render::markdown;
-use crate::render::utils::dedup_gap_markers;
 use rust_format::{Config, Formatter, RustFmt};
 use rustdoc_types::{Crate, Id};
 
 use super::error::Result;
+use crate::render::markdown;
+use crate::render::utils::dedup_gap_markers;
 
 /// Configuration for a render pass, specifying which items to include and how to format them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,10 +38,10 @@ impl RenderSelection {
 		full_source: HashSet<Id>,
 	) -> Self {
 		for id in &matches {
-			context.insert(id.clone());
+			context.insert(*id);
 		}
 		for id in &full_source {
-			context.insert(id.clone());
+			context.insert(*id);
 		}
 		Self {
 			matches,
@@ -197,10 +197,7 @@ impl Renderer {
 	}
 
 	/// Render a crate into formatted Rust source text, returning both output and final current file.
-	pub fn render_ext(
-		&self,
-		crate_data: &Crate,
-	) -> Result<(String, Option<std::path::PathBuf>)> {
+	pub fn render_ext(&self, crate_data: &Crate) -> Result<(String, Option<std::path::PathBuf>)> {
 		use super::state::RenderState;
 
 		let mut state = RenderState::new(self, crate_data);

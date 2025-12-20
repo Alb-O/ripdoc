@@ -160,8 +160,6 @@ pub fn extract_source(
 	};
 	let lines: Vec<&str> = file_content.lines().collect();
 
-
-
 	if span.begin.0 == 0 || span.begin.0 > lines.len() {
 		return Ok(String::new());
 	}
@@ -180,11 +178,10 @@ pub fn extract_source(
 			if let Some(pos) = line.find("//!") {
 				line.replace_range(pos..pos + 3, "///");
 			}
-		} else if trimmed.starts_with("/*!") {
-			if let Some(pos) = line.find("/*!") {
+		} else if trimmed.starts_with("/*!")
+			&& let Some(pos) = line.find("/*!") {
 				line.replace_range(pos..pos + 3, "/**");
 			}
-		}
 		extracted.push(line);
 	}
 

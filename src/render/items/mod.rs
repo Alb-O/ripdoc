@@ -1,26 +1,25 @@
-/// Module rendering logic.
-pub mod module;
-/// Struct and field rendering logic.
-pub mod structs;
 /// Enum and variant rendering logic.
 pub mod enums;
-/// Import and re-export rendering logic.
-pub mod use_stmt;
+/// Module rendering logic.
+pub mod module;
 /// Rendering logic for functions, constants, and type aliases.
 pub mod others;
+/// Struct and field rendering logic.
+pub mod structs;
+/// Import and re-export rendering logic.
+pub mod use_stmt;
 
+pub use enums::render_enum;
+pub use module::render_module;
+pub use others::{render_constant_item, render_function_item, render_type_alias_item};
 use rustdoc_types::{Id, Item, ItemEnum, Visibility};
+pub use structs::render_struct;
+pub use use_stmt::render_use;
 
 use super::impls::DERIVE_TRAITS;
 use super::macros::{render_macro, render_proc_macro};
 use super::state::RenderState;
 use super::utils::must_get;
-
-pub use module::render_module;
-pub use structs::render_struct;
-pub use enums::render_enum;
-pub use use_stmt::render_use;
-pub use others::{render_function_item, render_constant_item, render_type_alias_item};
 
 pub(crate) fn extracted_source_looks_like_item(item: &Item, source: &str) -> bool {
 	fn first_code_line(source: &str) -> Option<&str> {
@@ -135,12 +134,14 @@ pub fn render_item(
 		return String::new();
 	}
 
-	if !matches!(item.inner, ItemEnum::Module(_) | ItemEnum::Impl(_)) && state.visited.contains(&item.id) {
+	if !matches!(item.inner, ItemEnum::Module(_) | ItemEnum::Impl(_))
+		&& state.visited.contains(&item.id)
+	{
 		return String::new();
 	}
 
 	if matches!(item.inner, ItemEnum::Module(_)) {
-		let is_new = state.visited.insert(item.id.clone());
+		let is_new = state.visited.insert(item.id);
 		if !is_new {
 			return String::new();
 		}
@@ -154,18 +155,14 @@ pub fn render_item(
 		return String::new();
 	}
 
-	if state.selection_is_full_source(&item.id) {
-		if let Some(span) = &item.span {
-			if let Ok(source) =
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+			&& let Ok(source) =
 				crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-			{
-				if extracted_source_looks_like_item(item, &source) {
-					state.visited.insert(item.id.clone());
+				&& extracted_source_looks_like_item(item, &source) {
+					state.visited.insert(item.id);
 					return format!("{source}\n\n");
 				}
-			}
-		}
-	}
 
 	let mut output = match &item.inner {
 		ItemEnum::Module(_) => render_module(state, path_prefix, item),
@@ -182,7 +179,7 @@ pub fn render_item(
 	};
 
 	if !output.is_empty() {
-		state.visited.insert(item.id.clone());
+		state.visited.insert(item.id);
 	}
 
 	if !output.is_empty()

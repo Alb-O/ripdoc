@@ -1,9 +1,12 @@
 use std::path::{Path, PathBuf};
+
+use super::state::SkeleEntry;
 use crate::cargo_utils::resolve_target;
 use crate::core_api::error::RipdocError;
-use crate::core_api::search::{SearchDomain, SearchIndex, SearchItemKind, SearchOptions, SearchResult};
+use crate::core_api::search::{
+	SearchDomain, SearchIndex, SearchItemKind, SearchOptions, SearchResult,
+};
 use crate::core_api::{Result, Ripdoc};
-use super::state::SkeleEntry;
 
 #[derive(Debug, Clone)]
 /// Extra details discovered while validating a skelebuild add target.
@@ -82,8 +85,13 @@ pub fn resolve_best_path_match(
 			});
 		}
 
-		let mut local: Vec<SearchResult> = results.iter().cloned().filter(|r| is_local(r)).collect();
-		let pool = if !local.is_empty() { &mut local } else { &mut results };
+		let mut local: Vec<SearchResult> =
+			results.iter().filter(|&r| is_local(r)).cloned().collect();
+		let pool = if !local.is_empty() {
+			&mut local
+		} else {
+			&mut results
+		};
 		if pool.is_empty() {
 			continue;
 		}
@@ -135,8 +143,10 @@ pub fn resolve_impl_target(
 	}
 
 	let ty_match = resolve_best_path_match(index, crate_name, pkg_root, type_query, &is_local)?;
-	if !matches!(ty_match.kind, SearchItemKind::Struct | SearchItemKind::Enum | SearchItemKind::Union)
-	{
+	if !matches!(
+		ty_match.kind,
+		SearchItemKind::Struct | SearchItemKind::Enum | SearchItemKind::Union
+	) {
 		return None;
 	}
 
@@ -150,11 +160,13 @@ pub fn resolve_impl_target(
 	if trait_results.is_empty() {
 		return None;
 	}
-	trait_results.sort_by_key(|r| (
-		!(r.raw_name == trait_name),
-		!is_local(r),
-		r.path_string.len(),
-	));
+	trait_results.sort_by_key(|r| {
+		(
+			(r.raw_name != trait_name),
+			!is_local(r),
+			r.path_string.len(),
+		)
+	});
 	let trait_match = trait_results.first()?.clone();
 
 	let Some(ty_item) = crate_data.index.get(&ty_match.item_id) else {
@@ -184,7 +196,10 @@ pub fn resolve_impl_target(
 }
 
 /// Validate that a target specification can be resolved against its crate.
-pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Result<ValidatedTargetInfo> {
+pub fn validate_add_target_or_error(
+	target_spec: &str,
+	ripdoc: &Ripdoc,
+) -> Result<ValidatedTargetInfo> {
 	let parsed = crate::cargo_utils::target::Target::parse(target_spec)?;
 	if parsed.path.is_empty() {
 		return Ok(ValidatedTargetInfo {
@@ -248,7 +263,7 @@ pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Resul
 		crate_name.as_deref(),
 		&pkg_root,
 		&base_query,
-		&is_local,
+		is_local,
 	) {
 		matched_path = Some(best.path_string);
 		matched_id = Some(best.item_id);
@@ -258,7 +273,7 @@ pub fn validate_add_target_or_error(target_spec: &str, ripdoc: &Ripdoc) -> Resul
 		crate_name.as_deref(),
 		&pkg_root,
 		&base_query,
-		&is_local,
+		is_local,
 	) {
 		matched_path = Some(base_query.clone());
 		matched_id = Some(impl_id);

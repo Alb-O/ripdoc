@@ -490,7 +490,8 @@ fn split_path_target_spec(value: &str) -> Option<(String, String)> {
 		return None;
 	}
 
-	let looks_like_path = left.contains('/') || left.contains('\\') || left.starts_with('.') || left.starts_with('/');
+	let looks_like_path =
+		left.contains('/') || left.contains('\\') || left.starts_with('.') || left.starts_with('/');
 	if looks_like_path || std::path::Path::new(left).exists() {
 		Some((left.to_string(), right.to_string()))
 	} else {
@@ -565,12 +566,11 @@ fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool)
 			}
 			let rel = path.strip_prefix("b/").unwrap_or(path);
 			let abs = git_root.join(rel);
-			if only_rust {
-				if abs.extension().and_then(|e| e.to_str()) != Some("rs") {
+			if only_rust
+				&& abs.extension().and_then(|e| e.to_str()) != Some("rs") {
 					current_file = None;
 					continue;
 				}
-			}
 			current_file = Some(abs);
 			continue;
 		}
@@ -582,7 +582,10 @@ fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool)
 			continue;
 		};
 
-		let plus_idx = line.find(" +").map(|i| i + 2).or_else(|| line.find('+').map(|i| i + 1));
+		let plus_idx = line
+			.find(" +")
+			.map(|i| i + 2)
+			.or_else(|| line.find('+').map(|i| i + 1));
 		let Some(plus_idx) = plus_idx else {
 			continue;
 		};
@@ -611,7 +614,10 @@ fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool)
 	hunks
 }
 
-fn find_package_root(file: &std::path::Path, git_root: &std::path::Path) -> Option<std::path::PathBuf> {
+fn find_package_root(
+	file: &std::path::Path,
+	git_root: &std::path::Path,
+) -> Option<std::path::PathBuf> {
 	let mut cur = file.parent()?.to_path_buf();
 	loop {
 		if cur.join("Cargo.toml").exists() {
@@ -696,8 +702,10 @@ fn resolve_changed_context(
 				path.canonicalize().unwrap_or(path)
 			};
 
-			let mut entries_by_file: std::collections::HashMap<std::path::PathBuf, Vec<&ripdoc::core_api::search::SearchResult>> =
-				std::collections::HashMap::new();
+			let mut entries_by_file: std::collections::HashMap<
+				std::path::PathBuf,
+				Vec<&ripdoc::core_api::search::SearchResult>,
+			> = std::collections::HashMap::new();
 			for entry in index.entries() {
 				let Some(item) = crate_data.index.get(&entry.item_id) else {
 					continue;
@@ -710,7 +718,10 @@ fn resolve_changed_context(
 			}
 
 			for hunk in &pkg_hunks {
-				let file = hunk.file.canonicalize().unwrap_or_else(|_| hunk.file.clone());
+				let file = hunk
+					.file
+					.canonicalize()
+					.unwrap_or_else(|_| hunk.file.clone());
 				let Some(entries) = entries_by_file.get(&file) else {
 					continue;
 				};
@@ -726,8 +737,8 @@ fn resolve_changed_context(
 					let Some(span) = &item.span else {
 						continue;
 					};
-					let begin = span.begin.0 as usize;
-					let end = span.end.0 as usize;
+					let begin = span.begin.0;
+					let end = span.end.0;
 					if begin == 0 || end == 0 {
 						continue;
 					}
@@ -737,11 +748,7 @@ fn resolve_changed_context(
 						0
 					} else if end < range_start {
 						range_start - end
-					} else if begin > range_end {
-						begin - range_end
-					} else {
-						0
-					};
+					} else { begin.saturating_sub(range_end) };
 
 					let kind_priority = match entry.kind {
 						SearchItemKind::Method
@@ -815,7 +822,7 @@ fn resolve_changed_context(
 
 #[cfg(test)]
 mod diff_tests {
-	use super::{parse_git_diff_hunks, DiffHunk};
+	use super::{DiffHunk, parse_git_diff_hunks};
 
 	#[test]
 	fn parse_git_diff_hunks_extracts_new_ranges() {
@@ -823,7 +830,11 @@ mod diff_tests {
 		let root = std::path::PathBuf::from("/repo");
 		let hunks = parse_git_diff_hunks(diff, &root, true);
 		assert_eq!(hunks.len(), 1);
-		let DiffHunk { file, start_line, end_line } = &hunks[0];
+		let DiffHunk {
+			file,
+			start_line,
+			end_line,
+		} = &hunks[0];
 		assert!(file.ends_with("src/lib.rs"));
 		assert_eq!((*start_line, *end_line), (10, 12));
 	}
@@ -834,12 +845,11 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 	let mut target = args.target.clone();
 	let mut item_query = args.item.clone();
 
-	if args.search.is_none() && item_query.is_none() {
-		if let Some((split_target, split_query)) = split_path_target_spec(&args.target) {
+	if args.search.is_none() && item_query.is_none()
+		&& let Some((split_target, split_query)) = split_path_target_spec(&args.target) {
 			target = split_target;
 			item_query = Some(split_query);
 		}
-	}
 
 	let explicit_search = args.search.as_deref();
 	let implicit_search = item_query.as_deref();
@@ -875,8 +885,7 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 				let last_segment = trimmed.rsplit("::").next().unwrap_or(trimmed);
 				println!(
 					"Tip: discover the exact rustdoc path with: ripdoc list {} --search \"{}\" --search-spec path --private",
-					target,
-					last_segment
+					target, last_segment
 				);
 				println!(
 					"Tip: if the code isn't in rustdoc output, use `ripdoc skelebuild add-file <path>` or `ripdoc skelebuild add-raw <path[:start[:end]]>` to include raw source."
@@ -886,7 +895,11 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 		}
 
 		let output = if should_color_output(common) {
-			highlight_matches(&response.rendered, trimmed, args.filters.search_case_sensitive)
+			highlight_matches(
+				&response.rendered,
+				trimmed,
+				args.filters.search_case_sensitive,
+			)
 		} else {
 			response.rendered
 		};
@@ -1255,7 +1268,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				|| args.implementation
 				|| args.raw_source
 			{
-				return Err("`ripdoc raw` only accepts a target (no item/search/source flags).".into());
+				return Err(
+					"`ripdoc raw` only accepts a target (no item/search/source flags).".into(),
+				);
 			}
 			let rs = build_ripdoc(&args.common);
 			run_raw(&args.common, &args.target, &rs)
@@ -1289,89 +1304,89 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						print!("{}", include_str!("skelebuild/agents_skelebuild.md"));
 						return Ok(());
 					}
-				SkelebuildSubcommand::Add {
-					target,
-					items,
-					implementation,
-					raw_source,
-					no_validate,
-					output: o,
-					plain: p,
-				} => {
-					if o.is_some() {
-						output = o;
-					}
-					if p {
-						plain = p;
+					SkelebuildSubcommand::Add {
+						target,
+						items,
+						implementation,
+						raw_source,
+						no_validate,
+						output: o,
+						plain: p,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						if p {
+							plain = p;
+						}
+
+						let validate = !no_validate;
+						let target_prefix = target.clone();
+						let targets: Vec<String> = if items.is_empty() {
+							vec![target]
+						} else {
+							items
+								.into_iter()
+								.map(|item| format!("{target_prefix}::{item}"))
+								.collect()
+						};
+
+						if targets.len() == 1 {
+							Some(SkeleAction::Add {
+								target: targets[0].clone(),
+								implementation,
+								raw_source,
+								validate,
+							})
+						} else {
+							Some(SkeleAction::AddMany {
+								targets,
+								implementation,
+								raw_source,
+								validate,
+							})
+						}
 					}
 
-					let validate = !no_validate;
-					let target_prefix = target.clone();
-					let targets: Vec<String> = if items.is_empty() {
-						vec![target]
-					} else {
-						items
-							.into_iter()
-							.map(|item| format!("{target_prefix}::{item}"))
-							.collect()
-					};
-
-					if targets.len() == 1 {
-						Some(SkeleAction::Add {
-							target: targets[0].clone(),
-							implementation,
-							raw_source,
-							validate,
+					SkelebuildSubcommand::AddRaw { spec, output: o } => {
+						if o.is_some() {
+							output = o;
+						}
+						Some(SkeleAction::AddRaw { spec })
+					}
+					SkelebuildSubcommand::AddFile { file, output: o } => {
+						if o.is_some() {
+							output = o;
+						}
+						Some(SkeleAction::AddRaw {
+							spec: file.display().to_string(),
 						})
-					} else {
-						Some(SkeleAction::AddMany {
-							targets,
-							implementation,
-							raw_source,
-							validate,
-						})
 					}
-				}
-
-				SkelebuildSubcommand::AddRaw { spec, output: o } => {
-					if o.is_some() {
-						output = o;
+					SkelebuildSubcommand::AddChanged {
+						git,
+						staged,
+						only_rust,
+						output: o,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						let git_root = git_toplevel()?;
+						let diff = git_diff_text(git.as_deref(), staged)?;
+						let hunks = parse_git_diff_hunks(&diff, &git_root, only_rust);
+						if hunks.is_empty() {
+							println!("No changed hunks found.");
+							return Ok(());
+						}
+						let (targets, raw_specs) =
+							resolve_changed_context(&hunks, &rs, &args.common)?;
+						if targets.is_empty() && raw_specs.is_empty() {
+							println!("No changed context could be resolved.");
+							return Ok(());
+						}
+						Some(SkeleAction::AddChangedResolved { targets, raw_specs })
 					}
-					Some(SkeleAction::AddRaw { spec })
-				}
-				SkelebuildSubcommand::AddFile { file, output: o } => {
-					if o.is_some() {
-						output = o;
-					}
-					Some(SkeleAction::AddRaw {
-						spec: file.display().to_string(),
-					})
-				}
-				SkelebuildSubcommand::AddChanged {
-					git,
-					staged,
-					only_rust,
-					output: o,
-				} => {
-					if o.is_some() {
-						output = o;
-					}
-					let git_root = git_toplevel()?;
-					let diff = git_diff_text(git.as_deref(), staged)?;
-					let hunks = parse_git_diff_hunks(&diff, &git_root, only_rust);
-					if hunks.is_empty() {
-						println!("No changed hunks found.");
-						return Ok(());
-					}
-					let (targets, raw_specs) = resolve_changed_context(&hunks, &rs, &args.common)?;
-					if targets.is_empty() && raw_specs.is_empty() {
-						println!("No changed context could be resolved.");
-						return Ok(());
-					}
-					Some(SkeleAction::AddChangedResolved { targets, raw_specs })
-				}
-				SkelebuildSubcommand::Update {
-
+					SkelebuildSubcommand::Update {
 						spec,
 						implementation,
 						no_implementation,
@@ -1402,41 +1417,41 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							raw_source: raw_value,
 						})
 					}
-				SkelebuildSubcommand::Inject {
-					content,
-					from_stdin,
-					from_file,
-					literal,
-					after,
-					after_target,
-					before_target,
-					at,
-					output: o,
-				} => {
-					if o.is_some() {
-						output = o;
-					}
-
-					let content = if from_stdin {
-						use std::io::Read;
-						let mut buf = String::new();
-						std::io::stdin().read_to_string(&mut buf)?;
-						buf
-					} else if let Some(path) = from_file {
-						std::fs::read_to_string(path)?
-					} else {
-						content.unwrap_or_default()
-					};
-
-					Some(SkeleAction::Inject {
+					SkelebuildSubcommand::Inject {
 						content,
+						from_stdin,
+						from_file,
 						literal,
 						after,
 						after_target,
 						before_target,
 						at,
-					})
-				}
+						output: o,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+
+						let content = if from_stdin {
+							use std::io::Read;
+							let mut buf = String::new();
+							std::io::stdin().read_to_string(&mut buf)?;
+							buf
+						} else if let Some(path) = from_file {
+							std::fs::read_to_string(path)?
+						} else {
+							content.unwrap_or_default()
+						};
+
+						Some(SkeleAction::Inject {
+							content,
+							literal,
+							after,
+							after_target,
+							before_target,
+							at,
+						})
+					}
 
 					SkelebuildSubcommand::Remove { target, output: o } => {
 						if o.is_some() {
@@ -1444,7 +1459,10 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Remove(target))
 					}
-					SkelebuildSubcommand::Reset { output: o, plain: p } => {
+					SkelebuildSubcommand::Reset {
+						output: o,
+						plain: p,
+					} => {
 						if o.is_some() {
 							output = o;
 						}
@@ -1453,10 +1471,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Reset)
 					}
-				SkelebuildSubcommand::Status => Some(SkeleAction::Status),
-				SkelebuildSubcommand::Preview => Some(SkeleAction::Preview),
-				SkelebuildSubcommand::Rebuild => Some(SkeleAction::Rebuild),
-
+					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
+					SkelebuildSubcommand::Preview => Some(SkeleAction::Preview),
+					SkelebuildSubcommand::Rebuild => Some(SkeleAction::Rebuild),
 				}
 			} else {
 				None
@@ -1465,7 +1482,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			ripdoc::skelebuild::run_skelebuild(action, output, plain, args.show_state, &rs)?;
 			Ok(())
 		}
-
 	}
 }
 #[derive(Debug, Clone, Copy, PartialEq, ValueEnum)]

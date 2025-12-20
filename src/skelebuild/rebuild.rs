@@ -2,14 +2,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
+use super::SkeleGroup;
+use super::resolver::{resolve_best_path_match, resolve_impl_target};
+use super::state::{SkeleEntry, SkeleRawSource, SkeleState};
 use crate::cargo_utils::resolve_target;
-use crate::core_api::search::{SearchResult, SearchIndex, build_render_selection, SearchItemKind};
+use crate::core_api::search::{SearchIndex, SearchItemKind, SearchResult, build_render_selection};
 use crate::core_api::{Result, Ripdoc};
 use crate::render::Renderer;
-
-use super::state::{SkeleEntry, SkeleRawSource, SkeleState};
-use super::resolver::{resolve_best_path_match, resolve_impl_target};
-use super::SkeleGroup;
 
 pub fn ensure_markdown_block_sep(out: &mut String) {
 	if out.is_empty() {
@@ -36,7 +35,10 @@ fn render_raw_source(out: &mut String, raw: &SkeleRawSource) -> Result<()> {
 
 	let total_lines = lines.len();
 	if total_lines == 0 {
-		out.push_str(&format!("### Raw source: {}\n\n```rust\n```\n", raw.file.display()));
+		out.push_str(&format!(
+			"### Raw source: {}\n\n```rust\n```\n",
+			raw.file.display()
+		));
 		return Ok(());
 	}
 
@@ -109,7 +111,10 @@ impl SkeleState {
 								}
 								Err(err) => {
 									had_errors = true;
-									eprintln!("Error: failed to load crate for `{}`: {err}", t.path);
+									eprintln!(
+										"Error: failed to load crate for `{}`: {err}",
+										t.path
+									);
 									continue;
 								}
 							}
@@ -119,12 +124,10 @@ impl SkeleState {
 							pkg_root: last_root,
 							targets,
 						}) = grouped_entries.last_mut()
-						{
-							if *last_root == pkg_root {
+							&& *last_root == pkg_root {
 								targets.push(t.clone());
 								continue;
 							}
-						}
 						grouped_entries.push(SkeleGroup::Targets {
 							pkg_root: pkg_root.clone(),
 							targets: vec![t.clone()],
@@ -209,7 +212,9 @@ impl SkeleState {
 										format!("{name}::{}", parsed.path.join("::"))
 									}
 								}
-								crate::cargo_utils::target::Entrypoint::Path(_) => parsed.path.join("::"),
+								crate::cargo_utils::target::Entrypoint::Path(_) => {
+									parsed.path.join("::")
+								}
 							},
 							Err(_) => String::new(),
 						};
@@ -222,10 +227,7 @@ impl SkeleState {
 							} else {
 								"target"
 							};
-							eprintln!(
-								"Warning: {flag} needs an item path: `{}`",
-								target.path
-							);
+							eprintln!("Warning: {flag} needs an item path: `{}`", target.path);
 							continue;
 						}
 
@@ -234,7 +236,7 @@ impl SkeleState {
 							crate_name.as_deref(),
 							&pkg_root,
 							&base_query,
-							&is_local,
+							is_local,
 						) {
 							Some(base) => base,
 							None => {
@@ -245,42 +247,47 @@ impl SkeleState {
 									crate_name.as_deref(),
 									&pkg_root,
 									&base_query,
-									&is_local,
+									is_local,
 								) {
 									selection_results.push(ty_match);
 									full_source.insert(impl_id);
 									continue;
 								}
-								eprintln!(
-									"Warning: no matches found for: `{}`",
-									base_query
-								);
+								eprintln!("Warning: no matches found for: `{}`", base_query);
 								continue;
 							}
 						};
 
 						selection_results.push(base.clone());
 
-						if target.raw_source {
-							if let Some(item) = crate_data.index.get(&base.item_id)
+						if target.raw_source
+							&& let Some(item) = crate_data.index.get(&base.item_id)
 								&& let Some(span) = &item.span
 							{
 								raw_files.insert(span.filename.clone());
 							}
-						}
 
 						if target.implementation {
-							if matches!(base.kind, SearchItemKind::Function | SearchItemKind::Method) {
+							if matches!(
+								base.kind,
+								SearchItemKind::Function | SearchItemKind::Method
+							) {
 								full_source.insert(base.item_id);
 							} else {
 								// Prefer full impl blocks when available: individual method spans can sometimes
 								// point at the surrounding `impl` item, and the renderer will reject them.
 								if let Some(item) = crate_data.index.get(&base.item_id) {
 									let impl_ids: Vec<rustdoc_types::Id> = match &item.inner {
-										rustdoc_types::ItemEnum::Struct(struct_) => struct_.impls.clone(),
+										rustdoc_types::ItemEnum::Struct(struct_) => {
+											struct_.impls.clone()
+										}
 										rustdoc_types::ItemEnum::Enum(enum_) => enum_.impls.clone(),
-										rustdoc_types::ItemEnum::Union(union_) => union_.impls.clone(),
-										rustdoc_types::ItemEnum::Trait(trait_) => trait_.implementations.clone(),
+										rustdoc_types::ItemEnum::Union(union_) => {
+											union_.impls.clone()
+										}
+										rustdoc_types::ItemEnum::Trait(trait_) => {
+											trait_.implementations.clone()
+										}
 										_ => Vec::new(),
 									};
 									for impl_id in impl_ids {
@@ -348,12 +355,8 @@ impl SkeleState {
 						eprintln!("Warning: no renderable targets found in this section.");
 					}
 
-					let selection = build_render_selection(
-						&index,
-						&search_results,
-						true,
-						full_source,
-					);
+					let selection =
+						build_render_selection(&index, &search_results, true, full_source);
 
 					let renderer = Renderer::new()
 						.with_format(crate::render::RenderFormat::Markdown)

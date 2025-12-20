@@ -12,9 +12,10 @@ pub mod list_tree;
 pub mod pattern;
 /// Search and indexing utilities.
 pub mod search;
-use rustdoc_types::Crate;
 use std::collections::HashSet;
 use std::fs;
+
+use rustdoc_types::Crate;
 
 pub use self::error::Result;
 pub use self::list_tree::{ListTreeNode, build_list_tree};
@@ -264,9 +265,9 @@ impl Ripdoc {
 			if raw_source {
 				let mut seen_files = HashSet::new();
 				for res in &results {
-					if let Some(item) = crate_data.index.get(&res.item_id) {
-						if let Some(span) = &item.span {
-							if seen_files.insert(span.filename.clone()) {
+					if let Some(item) = crate_data.index.get(&res.item_id)
+						&& let Some(span) = &item.span
+							&& seen_files.insert(span.filename.clone()) {
 								let abs_path = if span.filename.is_absolute() {
 									span.filename.clone()
 								} else {
@@ -280,8 +281,6 @@ impl Ripdoc {
 									));
 								}
 							}
-						}
-					}
 				}
 			}
 
@@ -418,9 +417,9 @@ impl Ripdoc {
 				if raw_source {
 					let mut seen_files = HashSet::new();
 					for res in &results {
-						if let Some(item) = crate_data.index.get(&res.item_id) {
-							if let Some(span) = &item.span {
-								if seen_files.insert(span.filename.clone()) {
+						if let Some(item) = crate_data.index.get(&res.item_id)
+							&& let Some(span) = &item.span
+								&& seen_files.insert(span.filename.clone()) {
 									let abs_path = if span.filename.is_absolute() {
 										span.filename.clone()
 									} else {
@@ -434,8 +433,6 @@ impl Ripdoc {
 										));
 									}
 								}
-							}
-						}
 					}
 				}
 			}

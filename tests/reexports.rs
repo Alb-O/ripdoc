@@ -2,8 +2,8 @@
 
 use std::fs;
 
-use ripdoc::core_api::search::{SearchDomain, SearchIndex, SearchOptions};
 use ripdoc::Ripdoc;
+use ripdoc::core_api::search::{SearchDomain, SearchIndex, SearchOptions};
 use tempfile::TempDir;
 
 #[test]
@@ -54,17 +54,15 @@ pub use inner::SelectionAccess;
 	opts.domains = SearchDomain::PATHS;
 	let results = index.search(&opts);
 
-	assert!(
-		results
-			.iter()
-			.any(|r| r.path_string == format!("{crate_name}::SelectionAccess")
-				&& matches!(
-					r.kind,
-					ripdoc::core_api::search::SearchItemKind::Trait
-						| ripdoc::core_api::search::SearchItemKind::TraitAlias
-						| ripdoc::core_api::search::SearchItemKind::TypeAlias
-				))
-	);
+	assert!(results.iter().any(
+		|r| r.path_string == format!("{crate_name}::SelectionAccess")
+			&& matches!(
+				r.kind,
+				ripdoc::core_api::search::SearchItemKind::Trait
+					| ripdoc::core_api::search::SearchItemKind::TraitAlias
+					| ripdoc::core_api::search::SearchItemKind::TypeAlias
+			)
+	));
 
 	Ok(())
 }

@@ -23,17 +23,15 @@ pub fn build_render_selection(
 
 		// Ensure that if an impl block is matched, its target struct is included in the context.
 		// This prevents "orphaned" impl blocks in flattened output.
-		if let Some(item) = index.crate_data().index.get(&result.item_id) {
-			if let rustdoc_types::ItemEnum::Impl(impl_) = &item.inner {
-				if let rustdoc_types::Type::ResolvedPath(path) = &impl_.for_ {
-					context.insert(path.id.clone());
+		if let Some(item) = index.crate_data().index.get(&result.item_id)
+			&& let rustdoc_types::ItemEnum::Impl(impl_) = &item.inner
+				&& let rustdoc_types::Type::ResolvedPath(path) = &impl_.for_ {
+					context.insert(path.id);
 					// Also include ancestors of the target struct
 					if let Some(target_entry) = index.get(&path.id) {
 						context.extend(target_entry.ancestors.iter().copied());
 					}
 				}
-			}
-		}
 	}
 
 	// Full-source items should still render even when there are no explicit search results.

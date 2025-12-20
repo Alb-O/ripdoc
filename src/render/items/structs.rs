@@ -1,4 +1,5 @@
 use rustdoc_types::{Id, Item, ItemEnum, StructKind};
+
 use super::super::impls::{render_impl, should_render_impl};
 use super::super::state::{GapController, RenderState};
 use super::super::syntax::*;
@@ -14,7 +15,12 @@ pub(crate) struct StructRenderContext<'a> {
 }
 
 impl<'a> StructRenderContext<'a> {
-	pub fn new(state: &RenderState, item: &'a Item, generics: String, where_clause: String) -> Self {
+	pub fn new(
+		state: &RenderState,
+		item: &'a Item,
+		generics: String,
+		where_clause: String,
+	) -> Self {
 		Self {
 			item,
 			generics,
@@ -54,8 +60,12 @@ pub fn render_struct(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 
 	let docs = docs(item);
 
-	let rendered_struct = if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		crate::render::utils::extract_source(span, state.config.source_root.as_deref()).ok().map(|s| format!("{s}\n\n"))
+	let rendered_struct = if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+	{
+		crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+			.ok()
+			.map(|s| format!("{s}\n\n"))
 	} else {
 		let generics = render_generics(&struct_.generics);
 		let where_clause = render_where_clause(&struct_.generics);
@@ -197,13 +207,15 @@ pub fn render_struct_field(
 		return String::new();
 	}
 
-	if state.selection_is_full_source(field_id) && let Some(span) = &field_item.span {
-		if let Ok(source) = crate::render::utils::extract_source(span, state.config.source_root.as_deref()) {
+	if state.selection_is_full_source(field_id)
+		&& let Some(span) = &field_item.span
+		&& let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+		{
 			let trimmed = source.trim();
 			let suffix = if trimmed.ends_with(',') { "\n" } else { ",\n" };
 			return format!("{source}{suffix}");
 		}
-	}
 
 	let ty = extract_item!(field_item, ItemEnum::StructField);
 	let mut out = String::new();

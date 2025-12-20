@@ -80,15 +80,13 @@ pub fn render_impl(state: &mut RenderState, path_prefix: &str, item: &Item) -> S
 		return String::new();
 	}
 
-	if state.selection_is_full_source(&item.id) {
-		if let Some(span) = &item.span {
-			if let Ok(source) =
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+			&& let Ok(source) =
 				super::utils::extract_source(span, state.config.source_root.as_deref())
 			{
 				return format!("{source}\n\n");
 			}
-		}
-	}
 
 	let mut output = docs(item);
 	let impl_ = extract_item!(item, ItemEnum::Impl);
@@ -182,16 +180,14 @@ pub fn render_impl_item(
 		return String::new();
 	}
 
-	if state.selection_is_full_source(&item.id) {
-		if let Some(span) = &item.span {
-			if let Ok(source) =
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+			&& let Ok(source) =
 				super::utils::extract_source(span, state.config.source_root.as_deref())
 				&& extracted_source_looks_like_item(item, &source)
 			{
 				return format!("{source}\n\n");
 			}
-		}
-	}
 
 	match &item.inner {
 		ItemEnum::Function(_) => render_function(state, item, false),
@@ -208,11 +204,12 @@ pub fn render_trait(state: &mut RenderState, item: &Item) -> String {
 		return String::new();
 	}
 
-	if state.selection_is_full_source(&item.id) && let Some(span) = &item.span {
-		if let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref()) {
+	if state.selection_is_full_source(&item.id)
+		&& let Some(span) = &item.span
+		&& let Ok(source) = super::utils::extract_source(span, state.config.source_root.as_deref())
+		{
 			return format!("{source}\n\n");
 		}
-	}
 
 	let mut output = docs(item);
 

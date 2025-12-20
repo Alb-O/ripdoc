@@ -3,9 +3,9 @@
 use std::fs;
 use std::path::PathBuf;
 
+use ripdoc::Ripdoc;
 use ripdoc::core_api::search::{SearchDomain, SearchIndex, SearchItemKind, SearchOptions};
 use ripdoc::skelebuild::{SkeleEntry, SkeleInjection, SkeleState, SkeleTarget};
-use ripdoc::Ripdoc;
 use tempfile::TempDir;
 
 fn write_bin_crate_fixture() -> TempDir {
@@ -85,9 +85,7 @@ fn find_inherent_save_path(crate_dir: &PathBuf) -> String {
 	let ripdoc = Ripdoc::new().with_offline(true).with_silent(true);
 	let crates = ripdoc
 		.inspect(
-			crate_dir
-				.to_str()
-				.expect("crate dir must be valid utf-8"),
+			crate_dir.to_str().expect("crate dir must be valid utf-8"),
 			false,
 			false,
 			Vec::new(),
@@ -114,7 +112,6 @@ fn find_inherent_save_path(crate_dir: &PathBuf) -> String {
 
 		candidates.push(result.path_string.clone());
 
-
 		// Inherent methods are typically `crate::Type::method`.
 		if result.path_string.contains("::Editor::save") {
 			inherent.get_or_insert(result.path_string);
@@ -132,7 +129,8 @@ fn find_inherent_save_path(crate_dir: &PathBuf) -> String {
 }
 
 #[test]
-fn skelebuild_realistic_session_produces_detailed_markdown() -> Result<(), Box<dyn std::error::Error>> {
+fn skelebuild_realistic_session_produces_detailed_markdown()
+-> Result<(), Box<dyn std::error::Error>> {
 	let fixture = write_bin_crate_fixture();
 	let crate_dir = fixture.path().to_path_buf();
 
@@ -197,7 +195,7 @@ fn skelebuild_realistic_session_produces_detailed_markdown() -> Result<(), Box<d
 		output.contains("This is injected commentary.\n\n### Source:")
 			|| output.contains("This is injected commentary.\n\n##")
 	);
-	assert!(output.contains("- second\n\n"));	// list terminator
+	assert!(output.contains("- second\n\n")); // list terminator
 	assert!(output.contains("\n\n### Source:"));
 
 	Ok(())
