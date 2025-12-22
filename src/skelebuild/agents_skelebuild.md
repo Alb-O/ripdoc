@@ -5,8 +5,8 @@
 ## Workflow
 
 ```bash
-# Start fresh (preserves --output/--plain from last time unless overridden)
-ripdoc skelebuild reset --output bat_map.md --plain
+# Start fresh (output defaults to skeleton.md)
+ripdoc skelebuild reset --output bat_map.md
 
 # Add an item (outline only)
 ripdoc skelebuild add bat::config::Config
@@ -45,7 +45,6 @@ ripdoc skelebuild preview      # print output without writing file
 ripdoc skelebuild status       # show entries and indices
 ripdoc skelebuild update bat::config::Config --implementation
 ripdoc skelebuild remove bat::assets::get_acknowledgements
-ripdoc skelebuild --plain      # toggle plain mode (auto-rebuilds)
 ```
 
 ## Tips
@@ -119,7 +118,7 @@ Execute multiple **parallel bash calls**, each containing a **sequential `&&` ch
 
 ### Strategy for 1000+ Line Context in <60s
 
-1. **Initialize:** `ripdoc skelebuild reset --output <file>.md --plain`
+1. **Initialize:** `ripdoc skelebuild reset --output <file>.md`
 2. **Parallel blast:** Launch 5-10 parallel bash tools covering:
    - Core structs & lifecycle methods
    - Primary API implementation

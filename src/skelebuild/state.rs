@@ -6,14 +6,29 @@ use serde::{Deserialize, Serialize};
 use crate::core_api::Result;
 
 /// State of an ongoing skeleton build.
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SkeleState {
 	/// Path to the output file where skeletonized code is written.
 	pub output_path: Option<PathBuf>,
 	/// List of entries (targets or manual injections) in the skeleton.
 	pub entries: Vec<SkeleEntry>,
-	/// Whether to use plain output (skip module nesting).
+	/// Whether to use plain output (skip module nesting). Defaults to true.
+	#[serde(default = "default_plain")]
 	pub plain: bool,
+}
+
+fn default_plain() -> bool {
+	true
+}
+
+impl Default for SkeleState {
+	fn default() -> Self {
+		Self {
+			output_path: None,
+			entries: Vec::new(),
+			plain: true,
+		}
+	}
 }
 
 /// An entry in the skeleton build.
