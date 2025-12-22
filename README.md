@@ -36,9 +36,6 @@ ripdoc skelebuild add ./path/to/crate crate::module::Type::method --implementati
 
 # Add instructions/notes near a specific target
 ripdoc skelebuild inject '## Notes\nInvestigate error handling here.' --after-target crate::module::Type
-
-# Rebuild explicitly (most commands rebuild automatically)
-ripdoc skelebuild rebuild
 ```
 
 The state is stored at `~/.local/state/ripdoc/skelebuild.json` so you can incrementally refine the source map across runs.
