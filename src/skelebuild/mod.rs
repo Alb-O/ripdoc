@@ -101,11 +101,24 @@ pub fn run_skelebuild(
 					.map(|count| count.to_string())
 					.unwrap_or_else(|| "-".to_string());
 				should_rebuild = true;
+				// Build compact flags summary (only show non-defaults)
+				let mut flags = Vec::new();
+				if !implementation {
+					flags.push("no-impl");
+				}
+				if raw_source {
+					flags.push("raw");
+				}
+				if !private {
+					flags.push("public-only");
+				}
+				let flags_str = if flags.is_empty() {
+					String::new()
+				} else {
+					format!(" [{}]", flags.join(", "))
+				};
 				action_summary = Some(format!(
-					"Added target: {normalized_target} (entry #{index}, source: {source}, span_lines: {span_lines}, implementation: {}, raw_source: {}, private: {})",
-					if implementation { "yes" } else { "no" },
-					if raw_source { "yes" } else { "no" },
-					if private { "yes" } else { "no" }
+					"Added #{index}: {normalized_target} ({source}:{span_lines}){flags_str}"
 				));
 			}
 		}
@@ -162,11 +175,26 @@ pub fn run_skelebuild(
 						added_indices.last().unwrap_or(&0)
 					)
 				};
+				// Build compact flags summary (only show non-defaults)
+				let mut flags = Vec::new();
+				if !implementation {
+					flags.push("no-impl");
+				}
+				if raw_source {
+					flags.push("raw");
+				}
+				if !private {
+					flags.push("public-only");
+				}
+				let flags_str = if flags.is_empty() {
+					String::new()
+				} else {
+					format!(" [{}]", flags.join(", "))
+				};
 				action_summary = Some(format!(
-					"Added {} targets (entries: {indices}, implementation: {}, raw_source: {})",
+					"Added {} targets ({}){flags_str}",
 					added.len(),
-					if implementation { "yes" } else { "no" },
-					if raw_source { "yes" } else { "no" }
+					indices
 				));
 			}
 		}
@@ -402,19 +430,16 @@ pub fn run_skelebuild(
 				target.implementation != prev_impl || target.raw_source != prev_raw_source;
 			should_rebuild = config_changed || changed;
 			action_summary = Some(if changed {
-				format!(
-					"Updated target: {} (implementation: {}, raw_source: {})",
-					target.path,
-					if target.implementation { "yes" } else { "no" },
-					if target.raw_source { "yes" } else { "no" }
-				)
+				let mut changes = Vec::new();
+				if target.implementation != prev_impl {
+					changes.push(if target.implementation { "+impl" } else { "-impl" });
+				}
+				if target.raw_source != prev_raw_source {
+					changes.push(if target.raw_source { "+raw" } else { "-raw" });
+				}
+				format!("Updated #{index}: {} [{}]", target.path, changes.join(", "))
 			} else {
-				format!(
-					"No change (target already has requested settings): {} (implementation: {}, raw_source: {})",
-					target.path,
-					if target.implementation { "yes" } else { "no" },
-					if target.raw_source { "yes" } else { "no" }
-				)
+				format!("No change: #{index} {}", target.path)
 			});
 		}
 		Some(SkeleAction::Remove(target_str)) => {
@@ -478,6 +503,11 @@ pub fn run_skelebuild(
 		.clone()
 		.unwrap_or_else(|| PathBuf::from("skeleton.md"));
 
+	// Count lines in output file for summary
+	let output_lines = std::fs::read_to_string(&output_path)
+		.map(|content| content.lines().count())
+		.unwrap_or(0);
+
 	let show_full_state = show_state_on_exit;
 	if show_full_state {
 		println!("Skeleton state:");
@@ -485,47 +515,57 @@ pub fn run_skelebuild(
 			"  State file: {}",
 			state::SkeleState::state_file().display()
 		);
-		println!("  Output: {}", output_path.display());
-		println!("  Plain mode: {}", state.plain);
+		println!("  Output: {} ({} lines)", output_path.display(), output_lines);
 		println!("  Entries: {}", state.entries.len());
-		println!(
-			"  Tip: prefer `inject --after-target/--before-target` to avoid index shifting; use `inject --at <index>` for precise placement.",
-		);
-		println!("  Entry list:");
 		for (idx, e) in state.entries.iter().enumerate() {
 			match e {
 			SkeleEntry::Target(t) => {
-				println!(
-					"    {idx}: [Target] {} (impl: {}, raw: {}, private: {})",
-					t.path, t.implementation, t.raw_source, t.private
-				)
+				// Only show flags that differ from defaults
+				let mut flags = Vec::new();
+				if !t.implementation {
+					flags.push("no-impl");
+				}
+				if t.raw_source {
+					flags.push("raw");
+				}
+				if !t.private {
+					flags.push("public");
+				}
+				let flags_str = if flags.is_empty() {
+					String::new()
+				} else {
+					format!(" [{}]", flags.join(", "))
+				};
+				println!("    {idx}: {}{flags_str}", t.path)
 			}
 				SkeleEntry::Injection(i) => {
 					let trimmed = i.content.trim();
 					let compact = trimmed.replace('\n', "\\n");
-					let summary = if compact.len() > 80 {
-						format!("{}...", &compact[..77])
+					let summary = if compact.len() > 60 {
+						format!("{}...", &compact[..57])
 					} else {
 						compact
 					};
-					println!("    {idx}: [Inject] {summary}");
+					println!("    {idx}: [inject] \"{summary}\"");
 				}
 				SkeleEntry::RawSource(raw) => {
-					println!("    {idx}: [Raw] {}", raw_source_summary(raw));
+					println!("    {idx}: [raw] {}", raw_source_summary(raw));
 				}
 			}
 		}
 	} else if let Some(summary) = action_summary {
 		println!(
-			"{summary} (output: {}, entries: {})",
+			"{summary} (output: {}, entries: {}, lines: {})",
 			output_path.display(),
-			state.entries.len()
+			state.entries.len(),
+			output_lines
 		);
 	} else {
 		println!(
-			"Output: {} (entries: {})",
+			"Output: {} (entries: {}, lines: {})",
 			output_path.display(),
-			state.entries.len()
+			state.entries.len(),
+			output_lines
 		);
 	}
 
