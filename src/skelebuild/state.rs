@@ -38,6 +38,9 @@ pub struct SkeleTarget {
 	/// Whether to include the literal, unelided source code.
 	#[serde(default)]
 	pub raw_source: bool,
+	/// Whether to search private items when resolving this target.
+	#[serde(default)]
+	pub private: bool,
 }
 
 /// A manual text injection.
@@ -72,6 +75,8 @@ pub enum SkeleAction {
 		raw_source: bool,
 		/// Whether to validate the target before saving.
 		validate: bool,
+		/// Whether to search private items.
+		private: bool,
 	},
 	/// Add multiple targets in one operation.
 	AddMany {
@@ -83,6 +88,8 @@ pub enum SkeleAction {
 		raw_source: bool,
 		/// Whether to validate the targets before saving.
 		validate: bool,
+		/// Whether to search private items.
+		private: bool,
 	},
 	/// Add a raw source snippet from disk.
 	AddRaw {

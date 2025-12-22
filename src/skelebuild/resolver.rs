@@ -73,11 +73,13 @@ pub fn resolve_best_path_match(
 	pkg_root: &Path,
 	base_query: &str,
 	is_local: impl Fn(&SearchResult) -> bool,
+	include_private: bool,
 ) -> Option<SearchResult> {
 	let candidates = build_query_candidates(base_query, crate_name);
 	for candidate in candidates {
 		let mut options = SearchOptions::new(&candidate);
 		options.domains = SearchDomain::PATHS;
+		options.include_private = include_private;
 		let mut results = index.search(&options);
 		if candidate.contains("::") {
 			results.retain(|r| {
@@ -136,13 +138,14 @@ pub fn resolve_impl_target(
 	pkg_root: &Path,
 	base_query: &str,
 	is_local: impl Fn(&SearchResult) -> bool,
+	include_private: bool,
 ) -> Option<(SearchResult, rustdoc_types::Id)> {
 	let (type_query, trait_name) = base_query.rsplit_once("::")?;
 	if trait_name.is_empty() {
 		return None;
 	}
 
-	let ty_match = resolve_best_path_match(index, crate_name, pkg_root, type_query, &is_local)?;
+	let ty_match = resolve_best_path_match(index, crate_name, pkg_root, type_query, &is_local, include_private)?;
 	if !matches!(
 		ty_match.kind,
 		SearchItemKind::Struct | SearchItemKind::Enum | SearchItemKind::Union
@@ -152,6 +155,7 @@ pub fn resolve_impl_target(
 
 	let mut trait_options = SearchOptions::new(trait_name);
 	trait_options.domains = SearchDomain::NAMES | SearchDomain::PATHS;
+	trait_options.include_private = include_private;
 	let mut trait_results: Vec<SearchResult> = index
 		.search(&trait_options)
 		.into_iter()
@@ -199,6 +203,7 @@ pub fn resolve_impl_target(
 pub fn validate_add_target_or_error(
 	target_spec: &str,
 	ripdoc: &Ripdoc,
+	include_private: bool,
 ) -> Result<ValidatedTargetInfo> {
 	let parsed = crate::cargo_utils::target::Target::parse(target_spec)?;
 	if parsed.path.is_empty() {
@@ -264,6 +269,7 @@ pub fn validate_add_target_or_error(
 		&pkg_root,
 		&base_query,
 		is_local,
+		include_private,
 	) {
 		matched_path = Some(best.path_string);
 		matched_id = Some(best.item_id);
@@ -274,6 +280,7 @@ pub fn validate_add_target_or_error(
 		&pkg_root,
 		&base_query,
 		is_local,
+		include_private,
 	) {
 		matched_path = Some(base_query.clone());
 		matched_id = Some(impl_id);

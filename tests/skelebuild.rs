@@ -155,6 +155,7 @@ fn skelebuild_realistic_session_produces_detailed_markdown()
 			),
 			implementation: true,
 			raw_source: false,
+			private: false,
 		}),
 		SkeleEntry::Injection(SkeleInjection {
 			// Stored injections are literal; CLI `inject` now unescapes `\\n` by default.
@@ -164,12 +165,14 @@ fn skelebuild_realistic_session_produces_detailed_markdown()
 			path: format!("{}::{inherent_save}", crate_dir.display()),
 			implementation: true,
 			raw_source: false,
+			private: false,
 		}),
 		// Target an entire impl block via `Type::Trait`.
 		SkeleEntry::Target(SkeleTarget {
 			path: format!("{}::editor::Editor::EditorOps", crate_dir.display()),
 			implementation: false,
 			raw_source: false,
+			private: false,
 		}),
 	];
 

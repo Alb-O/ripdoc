@@ -28,7 +28,7 @@ pub(crate) enum SkeleGroup {
 pub fn run_skelebuild(
 	action: Option<SkeleAction>,
 	output: Option<PathBuf>,
-	plain: bool,
+	plain: Option<bool>,
 	show_state: bool,
 	ripdoc: &Ripdoc,
 ) -> Result<()> {
@@ -49,8 +49,8 @@ pub fn run_skelebuild(
 		};
 		state.output_path = Some(out);
 	}
-	if plain {
-		state.plain = true;
+	if let Some(plain_value) = plain {
+		state.plain = plain_value;
 	}
 
 	let config_changed = state.output_path != prev_output_path || state.plain != prev_plain;
@@ -64,10 +64,11 @@ pub fn run_skelebuild(
 			implementation,
 			raw_source,
 			validate,
+			private,
 		}) => {
 			let normalized_target = normalize_target_spec_for_storage(&target);
 			let validated = if validate {
-				Some(validate_add_target_or_error(&normalized_target, ripdoc)?)
+				Some(validate_add_target_or_error(&normalized_target, ripdoc, private)?)
 			} else {
 				None
 			};
@@ -87,6 +88,7 @@ pub fn run_skelebuild(
 					path: normalized_target.clone(),
 					implementation,
 					raw_source,
+					private,
 				}));
 				let index = state.entries.len() - 1;
 				let source = validated
@@ -100,9 +102,10 @@ pub fn run_skelebuild(
 					.unwrap_or_else(|| "-".to_string());
 				should_rebuild = true;
 				action_summary = Some(format!(
-					"Added target: {normalized_target} (entry #{index}, source: {source}, span_lines: {span_lines}, implementation: {}, raw_source: {})",
+					"Added target: {normalized_target} (entry #{index}, source: {source}, span_lines: {span_lines}, implementation: {}, raw_source: {}, private: {})",
 					if implementation { "yes" } else { "no" },
-					if raw_source { "yes" } else { "no" }
+					if raw_source { "yes" } else { "no" },
+					if private { "yes" } else { "no" }
 				));
 			}
 		}
@@ -111,6 +114,7 @@ pub fn run_skelebuild(
 			implementation,
 			raw_source,
 			validate,
+			private,
 		}) => {
 			let mut added: Vec<String> = Vec::new();
 			let mut added_indices: Vec<usize> = Vec::new();
@@ -118,7 +122,7 @@ pub fn run_skelebuild(
 			for target in targets {
 				let normalized_target = normalize_target_spec_for_storage(&target);
 				if validate {
-					let _ = validate_add_target_or_error(&normalized_target, ripdoc)?;
+					let _ = validate_add_target_or_error(&normalized_target, ripdoc, private)?;
 				}
 				let is_present = state.entries.iter().any(|e| match e {
 					SkeleEntry::Target(t) => t.path == normalized_target,
@@ -133,6 +137,7 @@ pub fn run_skelebuild(
 					path: normalized_target,
 					implementation,
 					raw_source,
+					private,
 				}));
 				added_indices.push(state.entries.len() - 1);
 			}
@@ -252,6 +257,7 @@ pub fn run_skelebuild(
 					path: normalized_target,
 					implementation: true,
 					raw_source: false,
+					private: false,
 				}));
 			}
 
@@ -434,7 +440,7 @@ pub fn run_skelebuild(
 			let prev_plain = state.plain;
 			state = SkeleState::default();
 			state.output_path = output.clone().or(prev_output);
-			state.plain = plain || prev_plain;
+			state.plain = plain.unwrap_or(prev_plain);
 			should_rebuild = true;
 			action_summary =
 				Some("State reset (entries cleared, output/plain preserved).".to_string());
@@ -450,7 +456,15 @@ pub fn run_skelebuild(
 			action_summary = Some("Rebuilt output.".to_string());
 		}
 		Some(SkeleAction::Status) | None => {
-			// Status is read-only and does not rewrite the output file.
+			// Status is read-only, but if config changed we should rebuild.
+			if config_changed && !state.entries.is_empty() {
+				should_rebuild = true;
+				action_summary = Some(format!(
+					"Config changed (plain: {}, output: {}), rebuilding.",
+					state.plain,
+					state.output_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "-".to_string())
+				));
+			}
 		}
 	}
 
@@ -480,12 +494,12 @@ pub fn run_skelebuild(
 		println!("  Entry list:");
 		for (idx, e) in state.entries.iter().enumerate() {
 			match e {
-				SkeleEntry::Target(t) => {
-					println!(
-						"    {idx}: [Target] {} (impl: {}, raw: {})",
-						t.path, t.implementation, t.raw_source
-					)
-				}
+			SkeleEntry::Target(t) => {
+				println!(
+					"    {idx}: [Target] {} (impl: {}, raw: {}, private: {})",
+					t.path, t.implementation, t.raw_source, t.private
+				)
+			}
 				SkeleEntry::Injection(i) => {
 					let trimmed = i.content.trim();
 					let compact = trimmed.replace('\n', "\\n");

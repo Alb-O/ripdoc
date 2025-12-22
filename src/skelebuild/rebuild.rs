@@ -231,32 +231,34 @@ impl SkeleState {
 							continue;
 						}
 
-						let base = match resolve_best_path_match(
-							&index,
-							crate_name.as_deref(),
-							&pkg_root,
-							&base_query,
-							is_local,
-						) {
-							Some(base) => base,
-							None => {
-								// Support targeting an entire impl block via `Type::Trait`.
-								if let Some((ty_match, impl_id)) = resolve_impl_target(
-									&index,
-									crate_data,
-									crate_name.as_deref(),
-									&pkg_root,
-									&base_query,
-									is_local,
-								) {
-									selection_results.push(ty_match);
-									full_source.insert(impl_id);
-									continue;
-								}
-								eprintln!("Warning: no matches found for: `{}`", base_query);
+					let base = match resolve_best_path_match(
+						&index,
+						crate_name.as_deref(),
+						&pkg_root,
+						&base_query,
+						is_local,
+						target.private,
+					) {
+						Some(base) => base,
+						None => {
+							// Support targeting an entire impl block via `Type::Trait`.
+							if let Some((ty_match, impl_id)) = resolve_impl_target(
+								&index,
+								crate_data,
+								crate_name.as_deref(),
+								&pkg_root,
+								&base_query,
+								is_local,
+								target.private,
+							) {
+								selection_results.push(ty_match);
+								full_source.insert(impl_id);
 								continue;
 							}
-						};
+							eprintln!("Warning: no matches found for: `{}`", base_query);
+							continue;
+						}
+					};
 
 						selection_results.push(base.clone());
 
@@ -385,6 +387,27 @@ impl SkeleState {
 			.clone()
 			.unwrap_or_else(|| PathBuf::from("skeleton.md"));
 		let output = self.build_output(ripdoc)?;
+
+		// Warn if entries exist but output is empty or nearly empty
+		let target_count = self
+			.entries
+			.iter()
+			.filter(|e| matches!(e, SkeleEntry::Target(_)))
+			.count();
+		let trimmed_len = output.trim().len();
+		if target_count > 0 && trimmed_len < 50 {
+			eprintln!(
+				"Warning: {} target entries exist but rebuilt output is nearly empty ({} chars).",
+				target_count, trimmed_len
+			);
+			eprintln!(
+				"This may indicate that the targets could not be resolved. Common causes:"
+			);
+			eprintln!("  - Private items not visible in rustdoc output (use `ripdoc skelebuild add-raw` or `add-file` instead)");
+			eprintln!("  - Feature-gated modules not enabled (use `--features` when building)");
+			eprintln!("  - Incorrect module paths (use `ripdoc list --search <name> --private` to discover exact paths)");
+		}
+
 		fs::write(&output_path, output)?;
 		Ok(())
 	}

@@ -195,8 +195,12 @@ struct SkelebuildArgs {
 	reset: bool,
 
 	/// Plain output (skip module nesting).
-	#[arg(long)]
+	#[arg(long, conflicts_with = "no_plain")]
 	plain: bool,
+
+	/// Disable plain output (use module nesting).
+	#[arg(long = "no-plain", conflicts_with = "plain")]
+	no_plain: bool,
 
 	/// Print full skelebuild state after the command.
 	#[arg(long = "show-state", default_value_t = false)]
@@ -227,6 +231,10 @@ enum SkelebuildSubcommand {
 		/// Include the literal, unelided source code for the containing file.
 		#[arg(short = 's', long, alias = "source", default_value_t = false)]
 		raw_source: bool,
+
+		/// Include private items when resolving targets.
+		#[arg(short = 'p', long, default_value_t = false)]
+		private: bool,
 
 		/// Disable validation (allows adding even if it won't resolve until later).
 		#[arg(long = "no-validate", default_value_t = false)]
@@ -1294,7 +1302,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			let rs = build_ripdoc(&args.common);
 
 			let mut output = args.output;
-			let mut plain = args.plain;
+			let mut plain: Option<bool> = if args.plain {
+				Some(true)
+			} else if args.no_plain {
+				Some(false)
+			} else {
+				None
+			};
 
 			let action = if args.reset {
 				Some(SkeleAction::Reset)
@@ -1304,49 +1318,52 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						print!("{}", include_str!("skelebuild/agents_skelebuild.md"));
 						return Ok(());
 					}
-					SkelebuildSubcommand::Add {
-						target,
-						items,
-						implementation,
-						raw_source,
-						no_validate,
-						output: o,
-						plain: p,
-					} => {
-						if o.is_some() {
-							output = o;
-						}
-						if p {
-							plain = p;
-						}
-
-						let validate = !no_validate;
-						let target_prefix = target.clone();
-						let targets: Vec<String> = if items.is_empty() {
-							vec![target]
-						} else {
-							items
-								.into_iter()
-								.map(|item| format!("{target_prefix}::{item}"))
-								.collect()
-						};
-
-						if targets.len() == 1 {
-							Some(SkeleAction::Add {
-								target: targets[0].clone(),
-								implementation,
-								raw_source,
-								validate,
-							})
-						} else {
-							Some(SkeleAction::AddMany {
-								targets,
-								implementation,
-								raw_source,
-								validate,
-							})
-						}
+				SkelebuildSubcommand::Add {
+					target,
+					items,
+					implementation,
+					raw_source,
+					private,
+					no_validate,
+					output: o,
+					plain: p,
+				} => {
+					if o.is_some() {
+						output = o;
 					}
+					if p {
+						plain = Some(true);
+					}
+
+					let validate = !no_validate;
+					let target_prefix = target.clone();
+					let targets: Vec<String> = if items.is_empty() {
+						vec![target]
+					} else {
+						items
+							.into_iter()
+							.map(|item| format!("{target_prefix}::{item}"))
+							.collect()
+					};
+
+					if targets.len() == 1 {
+						Some(SkeleAction::Add {
+							target: targets[0].clone(),
+							implementation,
+							raw_source,
+							validate,
+							private,
+						})
+					} else {
+						Some(SkeleAction::AddMany {
+							targets,
+							implementation,
+							raw_source,
+							validate,
+							private,
+						})
+					}
+				}
 
 					SkelebuildSubcommand::AddRaw { spec, output: o } => {
 						if o.is_some() {
@@ -1467,7 +1484,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							output = o;
 						}
 						if p {
-							plain = p;
+							plain = Some(true);
 						}
 						Some(SkeleAction::Reset)
 					}
