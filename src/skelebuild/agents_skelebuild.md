@@ -5,17 +5,14 @@
 ## Workflow
 
 ```bash
-# Start fresh (output defaults to skeleton.md)
+# Start fresh (output defaults to skeleton.md, plain mode and private resolution are on by default)
 ripdoc skelebuild reset --output bat_map.md
 
-# Add an item (outline only)
+# Add an item (outline only, private items are included by default)
 ripdoc skelebuild add bat::config::Config
 
 # Add with implementation span
 ripdoc skelebuild add bat::controller::Controller::run --implementation
-
-# Add a private item (not in public API)
-ripdoc skelebuild add bat::internal::Parser --private --implementation
 
 # Add multiple items at once
 ripdoc skelebuild add ./tome/bin/tome-term \
@@ -51,7 +48,7 @@ ripdoc skelebuild remove bat::assets::get_acknowledgements
 
 - **Injection placement**: Prefer `--after-target <spec>` / `--before-target <spec>` over `--at <index>` (indices shift as you insert).
 - **`--implementation`**: Includes function/method bodies; for structs/enums also pulls in local `impl` blocks.
-- **`--private`**: Enables resolving private items not in the public API.
+- **Private items**: Resolved by default. Use `--no-private` to restrict to public API only.
 - **Impl-block targeting**: Target an entire impl with `Type::Trait` (e.g. `Editor::EditorOps`).
 - **Raw source**: Use `add-raw path:START:END` or `add-file path` for code not in rustdoc (tests, macros, generated code).
 - **Validation**: `add` validates by default; use `--no-validate` to skip.
@@ -142,7 +139,6 @@ Warning: 5 target entries exist but rebuilt output is nearly empty (0 chars).
 
 **Causes & solutions:**
 
-1. **Private items**: Use `--private` flag when adding.
-2. **Feature-gated code**: Use `--features my_feature` when adding.
-3. **Code not in rustdoc**: Use `add-raw` or `add-file` instead.
-4. **Wrong paths**: Discover exact path with `ripdoc list --search <name> --private`.
+1. **Feature-gated code**: Use `--features my_feature` when adding.
+2. **Code not in rustdoc**: Use `add-raw` or `add-file` instead.
+3. **Wrong paths**: Discover exact path with `ripdoc list --search <name> --private`.

@@ -53,9 +53,13 @@ pub struct SkeleTarget {
 	/// Whether to include the literal, unelided source code.
 	#[serde(default)]
 	pub raw_source: bool,
-	/// Whether to search private items when resolving this target.
-	#[serde(default)]
+	/// Whether to search private items when resolving this target. Defaults to true.
+	#[serde(default = "default_private")]
 	pub private: bool,
+}
+
+fn default_private() -> bool {
+	true
 }
 
 /// A manual text injection.

@@ -257,7 +257,7 @@ pub fn run_skelebuild(
 					path: normalized_target,
 					implementation: true,
 					raw_source: false,
-					private: false,
+					private: true,
 				}));
 			}
 
