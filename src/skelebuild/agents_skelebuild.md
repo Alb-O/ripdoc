@@ -5,20 +5,16 @@
 ## Workflow
 
 ```bash
-# Start fresh (output defaults to skeleton.md, plain mode and private resolution are on by default)
+# Start fresh (defaults: plain mode, private resolution, and implementation extraction are all ON)
 ripdoc skelebuild reset --output bat_map.md
 
-# Add an item (outline only, private items are included by default)
+# Add an item (includes implementation spans by default)
 ripdoc skelebuild add bat::config::Config
-
-# Add with implementation span
-ripdoc skelebuild add bat::controller::Controller::run --implementation
 
 # Add multiple items at once
 ripdoc skelebuild add ./tome/bin/tome-term \
   tome::editor::Editor::render \
-  tome::editor::Editor::ensure_cursor_visible \
-  --implementation
+  tome::editor::Editor::ensure_cursor_visible
 
 # Add raw source directly from disk (for tests / code not in rustdoc)
 ripdoc skelebuild add-raw ./path/to/file.rs:336:364
@@ -46,11 +42,11 @@ ripdoc skelebuild remove bat::assets::get_acknowledgements
 
 ## Tips
 
-- **Injection placement**: Prefer `--after-target <spec>` / `--before-target <spec>` over `--at <index>` (indices shift as you insert).
-- **`--implementation`**: Includes function/method bodies; for structs/enums also pulls in local `impl` blocks.
-- **Private items**: Resolved by default. Use `--no-private` to restrict to public API only.
+- **Defaults**: `add` includes implementation spans, resolves private items, and uses plain (flat) output.
+- **Opt-out flags**: `--no-implementation` (signatures only), `--no-private` (public API only).
+- **Injection placement**: Prefer `--after-target <spec>` / `--before-target <spec>` over `--at <index>` (indices shift).
 - **Impl-block targeting**: Target an entire impl with `Type::Trait` (e.g. `Editor::EditorOps`).
-- **Raw source**: Use `add-raw path:START:END` or `add-file path` for code not in rustdoc (tests, macros, generated code).
+- **Raw source**: Use `add-raw path:START:END` or `add-file path` for code not in rustdoc.
 - **Validation**: `add` validates by default; use `--no-validate` to skip.
 - **Inject escaping**: `\n`, `\t`, `\\` are unescaped by default; use `--literal` to keep backslashes.
 - **Errors to stderr**: Warnings/errors go to stderr, keeping the output doc clean.
@@ -97,14 +93,14 @@ Execute multiple **parallel bash calls**, each containing a **sequential `&&` ch
       {
         "recipient_name": "functions.bash",
         "parameters": {
-          "command": "ripdoc skelebuild add ./crate Path1::Item1 --implementation && ripdoc skelebuild add ./crate Path1::Item2 --implementation",
+          "command": "ripdoc skelebuild add ./crate Path1::Item1 && ripdoc skelebuild add ./crate Path1::Item2",
           "description": "Trace code path A"
         }
       },
       {
         "recipient_name": "functions.bash",
         "parameters": {
-          "command": "ripdoc skelebuild add ./crate Path2::Item1 --implementation && ripdoc skelebuild add ./crate Path2::Item2 --implementation",
+          "command": "ripdoc skelebuild add ./crate Path2::Item1 && ripdoc skelebuild add ./crate Path2::Item2",
           "description": "Trace code path B"
         }
       }
@@ -127,7 +123,7 @@ Execute multiple **parallel bash calls**, each containing a **sequential `&&` ch
 
 - **Sequential (`&&`)**: Within a single code path where order matters.
 - **Parallel**: For unrelated paths or different subsystems.
-- **Always use `--implementation`** for methods to get full source context.
+- **Use `--no-implementation`** when you need ONLY signatures.
 
 ## Troubleshooting: Empty Output
 

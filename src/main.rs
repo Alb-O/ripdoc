@@ -224,9 +224,13 @@ enum SkelebuildSubcommand {
 		#[arg(value_name = "ITEM")]
 		items: Vec<String>,
 
-		/// Include the elided source implementation for this item.
-		#[arg(long, default_value_t = false)]
+		/// Include the elided source implementation for this item (default: true).
+		#[arg(long, default_value_t = true)]
 		implementation: bool,
+
+		/// Exclude implementation spans (show signatures only).
+		#[arg(long = "no-implementation", conflicts_with = "implementation")]
+		no_implementation: bool,
 
 		/// Include the literal, unelided source code for the containing file.
 		#[arg(short = 's', long, alias = "source", default_value_t = false)]
@@ -1322,54 +1326,56 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						print!("{}", include_str!("skelebuild/agents_skelebuild.md"));
 						return Ok(());
 					}
-			SkelebuildSubcommand::Add {
-				target,
-				items,
-				implementation,
-				raw_source,
-				private,
-				no_private,
-				no_validate,
-				output: o,
-				plain: p,
-			} => {
-				if o.is_some() {
-					output = o;
-				}
-				if p {
-					plain = Some(true);
-				}
-
-				let validate = !no_validate;
-				let effective_private = private && !no_private;
-				let target_prefix = target.clone();
-				let targets: Vec<String> = if items.is_empty() {
-					vec![target]
-				} else {
-					items
-						.into_iter()
-						.map(|item| format!("{target_prefix}::{item}"))
-						.collect()
-				};
-
-				if targets.len() == 1 {
-					Some(SkeleAction::Add {
-						target: targets[0].clone(),
-						implementation,
-						raw_source,
-						validate,
-						private: effective_private,
-					})
-				} else {
-					Some(SkeleAction::AddMany {
-						targets,
-						implementation,
-						raw_source,
-						validate,
-						private: effective_private,
-					})
-				}
+		SkelebuildSubcommand::Add {
+			target,
+			items,
+			implementation,
+			no_implementation,
+			raw_source,
+			private,
+			no_private,
+			no_validate,
+			output: o,
+			plain: p,
+		} => {
+			if o.is_some() {
+				output = o;
 			}
+			if p {
+				plain = Some(true);
+			}
+
+			let validate = !no_validate;
+			let effective_private = private && !no_private;
+			let effective_implementation = implementation && !no_implementation;
+			let target_prefix = target.clone();
+			let targets: Vec<String> = if items.is_empty() {
+				vec![target]
+			} else {
+				items
+					.into_iter()
+					.map(|item| format!("{target_prefix}::{item}"))
+					.collect()
+			};
+
+			if targets.len() == 1 {
+				Some(SkeleAction::Add {
+					target: targets[0].clone(),
+					implementation: effective_implementation,
+					raw_source,
+					validate,
+					private: effective_private,
+				})
+			} else {
+				Some(SkeleAction::AddMany {
+					targets,
+					implementation: effective_implementation,
+					raw_source,
+					validate,
+					private: effective_private,
+				})
+			}
+		}
 
 					SkelebuildSubcommand::AddRaw { spec, output: o } => {
 						if o.is_some() {
