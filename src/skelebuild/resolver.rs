@@ -556,3 +556,104 @@ pub fn find_entry_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 		))),
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_build_query_candidates_simple() {
+		let candidates = build_query_candidates("MyType", Some("mycrate"));
+		assert_eq!(candidates, vec!["MyType"]);
+	}
+
+	#[test]
+	fn test_build_query_candidates_with_path() {
+		let candidates = build_query_candidates("mycrate::module::Type", Some("mycrate"));
+		// Should include original, and suffix without first segment
+		assert!(candidates.contains(&"mycrate::module::Type".to_string()));
+		assert!(candidates.contains(&"module::Type".to_string()));
+	}
+
+	#[test]
+	fn test_build_query_candidates_wrong_crate_prefix() {
+		let candidates = build_query_candidates("wrong::module::Type", Some("mycrate"));
+		// Should include original, crate-replaced version, and suffix
+		assert!(candidates.contains(&"wrong::module::Type".to_string()));
+		assert!(candidates.contains(&"mycrate::module::Type".to_string()));
+		assert!(candidates.contains(&"module::Type".to_string()));
+	}
+
+	#[test]
+	fn test_target_entry_matches_spec_exact() {
+		assert!(target_entry_matches_spec("crate::module::Type", "crate::module::Type"));
+	}
+
+	#[test]
+	fn test_target_entry_matches_spec_suffix() {
+		assert!(target_entry_matches_spec("crate::module::Type", "Type"));
+		assert!(target_entry_matches_spec("crate::module::Type", "module::Type"));
+	}
+
+	#[test]
+	fn test_target_entry_matches_spec_with_path_prefix() {
+		let stored = "/home/user/project::crate::module::Type";
+		assert!(target_entry_matches_spec(stored, "crate::module::Type"));
+		assert!(target_entry_matches_spec(stored, "module::Type"));
+		assert!(target_entry_matches_spec(stored, "Type"));
+	}
+
+	#[test]
+	fn test_target_entry_matches_spec_no_match() {
+		assert!(!target_entry_matches_spec("crate::module::Type", "Other"));
+		assert!(!target_entry_matches_spec("crate::module::Type", "wrong::Type"));
+	}
+
+	#[test]
+	fn test_target_entry_matches_spec_empty() {
+		assert!(!target_entry_matches_spec("crate::module::Type", ""));
+		assert!(!target_entry_matches_spec("crate::module::Type", "   "));
+	}
+
+	#[test]
+	fn test_unescape_inject_content_newlines() {
+		assert_eq!(unescape_inject_content("a\\nb"), "a\nb");
+		assert_eq!(unescape_inject_content("a\\n\\nb"), "a\n\nb");
+	}
+
+	#[test]
+	fn test_unescape_inject_content_tabs() {
+		assert_eq!(unescape_inject_content("a\\tb"), "a\tb");
+	}
+
+	#[test]
+	fn test_unescape_inject_content_backslashes() {
+		assert_eq!(unescape_inject_content("a\\\\b"), "a\\b");
+	}
+
+	#[test]
+	fn test_unescape_inject_content_mixed() {
+		assert_eq!(
+			unescape_inject_content("## Title\\n\\nContent with \\t tabs and \\\\ backslash"),
+			"## Title\n\nContent with \t tabs and \\ backslash"
+		);
+	}
+
+	#[test]
+	fn test_unescape_inject_content_unknown_escapes() {
+		// Unknown escape sequences are kept as-is
+		assert_eq!(unescape_inject_content("\\x"), "\\x");
+		assert_eq!(unescape_inject_content("\\a\\b\\c"), "\\a\\b\\c");
+	}
+
+	#[test]
+	fn test_unescape_inject_content_trailing_backslash() {
+		assert_eq!(unescape_inject_content("trailing\\"), "trailing\\");
+	}
+
+	#[test]
+	fn test_unescape_inject_content_no_escapes() {
+		assert_eq!(unescape_inject_content("plain text"), "plain text");
+		assert_eq!(unescape_inject_content(""), "");
+	}
+}
