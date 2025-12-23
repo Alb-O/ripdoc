@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use ripdoc::Ripdoc;
 use ripdoc::core_api::search::{SearchDomain, SearchIndex, SearchItemKind, SearchOptions};
-use ripdoc::skelebuild::{SkeleEntry, SkeleInjection, SkeleState, SkeleTarget};
+use ripdoc::skelebuild::{SkeleEntry, SkeleInjection, SkeleRawSource, SkeleState, SkeleTarget};
 use tempfile::TempDir;
 
 fn write_bin_crate_fixture() -> TempDir {
@@ -201,5 +201,49 @@ fn skelebuild_realistic_session_produces_detailed_markdown()
 	assert!(output.contains("- second\n\n")); // list terminator
 	assert!(output.contains("\n\n### Source:"));
 
+	Ok(())
+}
+
+#[test]
+fn skelebuild_canonical_path_matching() -> Result<(), Box<dyn std::error::Error>> {
+	use ripdoc::skelebuild::resolver::find_entry_match;
+	
+	let fixture = write_bin_crate_fixture();
+	let crate_dir = fixture.path().to_path_buf();
+	
+	// Create a test file for raw source
+	let test_file = crate_dir.join("test.rs");
+	fs::write(&test_file, "// test file\n")?;
+	
+	// Create a SkeleRawSource with canonical key
+	let raw_source = SkeleRawSource {
+		file: test_file.clone(),
+		canonical_key: Some("test.rs".to_string()),
+		start_line: None,
+		end_line: None,
+	};
+	
+	let entries = vec![
+		SkeleEntry::Target(SkeleTarget {
+			path: "crate::module::Type".to_string(),
+			implementation: true,
+			raw_source: false,
+			private: true,
+		}),
+		SkeleEntry::RawSource(raw_source),
+	];
+	
+	// Test 1: Match by canonical key
+	let idx = find_entry_match(&entries, "test.rs")?;
+	assert_eq!(idx, 1, "Should match raw source by canonical key");
+	
+	// Test 2: Match target by path
+	let idx = find_entry_match(&entries, "crate::module::Type")?;
+	assert_eq!(idx, 0, "Should match target by path");
+	
+	// Test 3: Match by absolute path
+	let idx = find_entry_match(&entries, test_file.to_str().unwrap())?;
+	assert_eq!(idx, 1, "Should match raw source by absolute path");
+	
 	Ok(())
 }

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 pub use resolver::unescape_inject_content;
 use resolver::{
-	find_target_match, normalize_target_spec_for_storage, validate_add_target_or_error,
+	find_entry_match, find_target_match, normalize_target_spec_for_storage, validate_add_target_or_error,
 };
 pub use state::{SkeleAction, SkeleEntry, SkeleInjection, SkeleRawSource, SkeleState, SkeleTarget};
 
@@ -215,9 +215,21 @@ pub fn run_skelebuild(
 				state.entries.push(SkeleEntry::RawSource(raw.clone()));
 				let index = state.entries.len() - 1;
 				should_rebuild = true;
+				
+				// Print canonical key and suggested inject command
+				let inject_example = if let Some(ref canonical) = raw.canonical_key {
+					format!(
+						"\nEntry key: {}\n\nTo inject commentary after this entry:\n  ripdoc skelebuild inject --after-target \"{}\" --from-stdin <<'EOF'\n  your commentary here\n  EOF",
+						canonical, canonical
+					)
+				} else {
+					String::new()
+				};
+				
 				action_summary = Some(format!(
-					"Added raw source: {} (entry #{index})",
-					raw_source_summary(&raw)
+					"Added raw source: {} (entry #{index}){}",
+					raw_source_summary(&raw),
+					inject_example
 				));
 			}
 		}
@@ -340,14 +352,14 @@ pub fn run_skelebuild(
 				state.entries.insert(index, injection);
 				format!("Injected commentary at index {index}.")
 			} else if let Some(spec) = before_target {
-				let index = find_target_match(&state.entries, &spec)?;
+				let index = find_entry_match(&state.entries, &spec)?;
 				state.entries.insert(index, injection);
-				format!("Injected commentary before target at entry #{index}.")
+				format!("Injected commentary before entry #{index}.")
 			} else if let Some(spec) = after_target {
-				let index = find_target_match(&state.entries, &spec)?;
+				let index = find_entry_match(&state.entries, &spec)?;
 				let insert_at = index + 1;
 				state.entries.insert(insert_at, injection);
-				format!("Injected commentary after target at entry #{index}.")
+				format!("Injected commentary after entry #{index}.")
 			} else if let Some(after_key) = after {
 				let after_key = after_key.trim().to_string();
 				let after_upper = after_key.to_uppercase();
@@ -573,10 +585,17 @@ pub fn run_skelebuild(
 }
 
 fn raw_source_summary(raw: &SkeleRawSource) -> String {
+	// Use canonical key if available, otherwise use file path
+	let base = if let Some(ref key) = raw.canonical_key {
+		key.clone()
+	} else {
+		raw.file.display().to_string()
+	};
+	
 	match (raw.start_line, raw.end_line) {
-		(Some(start), Some(end)) if start == end => format!("{}:{start}", raw.file.display()),
-		(Some(start), Some(end)) => format!("{}:{start}:{end}", raw.file.display()),
-		_ => raw.file.display().to_string(),
+		(Some(start), Some(end)) if start == end => format!("{base}:{start}"),
+		(Some(start), Some(end)) => format!("{base}:{start}:{end}"),
+		_ => base,
 	}
 }
 
@@ -592,8 +611,11 @@ fn parse_raw_source_spec(spec: &str) -> Result<SkeleRawSource> {
 		None => (trimmed, None, None),
 		Some((maybe_path, last)) => {
 			let Ok(last_num) = last.parse::<usize>() else {
+				let file = normalize_file_path(trimmed)?;
+				let canonical_key = compute_canonical_key(&file);
 				return Ok(SkeleRawSource {
-					file: normalize_file_path(trimmed)?,
+					file,
+					canonical_key,
 					start_line: None,
 					end_line: None,
 				});
@@ -629,8 +651,11 @@ fn parse_raw_source_spec(spec: &str) -> Result<SkeleRawSource> {
 		}
 	}
 
+	let canonical_key = compute_canonical_key(&file);
+
 	Ok(SkeleRawSource {
 		file,
+		canonical_key,
 		start_line,
 		end_line,
 	})
@@ -649,4 +674,31 @@ fn normalize_file_path(path_str: &str) -> Result<PathBuf> {
 		path
 	};
 	Ok(abs)
+}
+
+/// Compute a canonical repo-root-relative path key for a file.
+/// Returns None if not in a git repo or if the file is outside the repo.
+fn compute_canonical_key(abs_path: &std::path::Path) -> Option<String> {
+	// Try to find git root
+	let git_root = std::process::Command::new("git")
+		.args(["rev-parse", "--show-toplevel"])
+		.output()
+		.ok()?;
+	
+	if !git_root.status.success() {
+		return None;
+	}
+	
+	let root_str = String::from_utf8_lossy(&git_root.stdout);
+	let root = std::path::PathBuf::from(root_str.trim());
+	
+	// Try to get relative path from git root
+	let canonical = abs_path.canonicalize().ok()?;
+	let canonical_root = root.canonicalize().ok()?;
+	
+	let rel = canonical.strip_prefix(&canonical_root).ok()?;
+	
+	// Convert to POSIX-style forward slashes
+	let rel_str = rel.to_str()?;
+	Some(rel_str.replace('\\', "/"))
 }

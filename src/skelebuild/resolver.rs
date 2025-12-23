@@ -412,3 +412,89 @@ pub fn find_target_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 		))),
 	}
 }
+
+/// Locate any entry (target or raw source) that matches the provided spec.
+/// This is used for --after-target/--before-target which should work with any stable entry key.
+pub fn find_entry_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
+	use super::state::SkeleEntry;
+	
+	let mut matches: Vec<usize> = Vec::new();
+	let spec = spec.trim();
+	
+	// Normalize the spec for matching
+	let normalized_spec = std::path::PathBuf::from(spec);
+	let canonical_spec = normalized_spec.canonicalize().ok();
+	let spec_str = spec.replace('\\', "/");
+	
+	for (idx, entry) in entries.iter().enumerate() {
+		let is_match = match entry {
+			SkeleEntry::Target(t) => {
+				// Match target paths as before
+				target_entry_matches_spec(&t.path, spec)
+			}
+			SkeleEntry::RawSource(r) => {
+				// Try multiple matching strategies for raw source:
+				// 1. Exact canonical key match
+				let canonical_match = if let Some(ref key) = r.canonical_key {
+					key == &spec_str || key == spec
+				} else {
+					false
+				};
+				
+				// 2. Exact absolute path match
+				let absolute_match = r.file.to_str() == Some(spec);
+				
+				// 3. Canonical path match (handles ./foo vs foo)
+				let canon_path_match = if let Some(ref canon) = canonical_spec {
+					r.file.canonicalize().ok().as_ref() == Some(canon)
+				} else {
+					false
+				};
+				
+				canonical_match || absolute_match || canon_path_match
+			}
+			SkeleEntry::Injection(_) => false,
+		};
+		
+		if is_match {
+			matches.push(idx);
+		}
+	}
+
+	match matches.as_slice() {
+		[] => {
+			// Provide helpful error with available keys
+			let available_keys: Vec<String> = entries
+				.iter()
+				.enumerate()
+				.filter_map(|(idx, entry)| match entry {
+					SkeleEntry::Target(t) => Some(format!("  #{}: [target] {}", idx, t.path)),
+					SkeleEntry::RawSource(r) => {
+						if let Some(ref key) = r.canonical_key {
+							Some(format!("  #{}: [raw] {}", idx, key))
+						} else {
+							Some(format!("  #{}: [raw] {}", idx, r.file.display()))
+						}
+					}
+					SkeleEntry::Injection(_) => None,
+				})
+				.take(10)
+				.collect();
+			
+			let available_str = if available_keys.is_empty() {
+				String::new()
+			} else {
+				format!("\n\nAvailable entry keys (first 10):\n{}", available_keys.join("\n"))
+			};
+			
+			Err(RipdocError::InvalidTarget(format!(
+				"No entry matches '{spec}'.{}\n\nTip: Run `ripdoc skelebuild status` to see all entries.",
+				available_str
+			)))
+		}
+		[only] => Ok(*only),
+		_ => Err(RipdocError::InvalidTarget(format!(
+			"Ambiguous entry match '{spec}': matches entries {matches:?}. Use a more specific spec or `inject --at <index>`.",
+		))),
+	}
+}

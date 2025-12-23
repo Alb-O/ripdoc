@@ -74,6 +74,10 @@ pub struct SkeleInjection {
 pub struct SkeleRawSource {
 	/// Absolute path to the file.
 	pub file: PathBuf,
+	/// Canonical repo-root-relative path (POSIX style with forward slashes).
+	/// This is the stable match key used for lookups.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub canonical_key: Option<String>,
 	/// 1-based inclusive start line, if set.
 	#[serde(default)]
 	pub start_line: Option<usize>,

@@ -27,11 +27,14 @@ ripdoc skelebuild add-changed --staged --only-rust
 # Insert notes (prefer target-relative insertion; `\n` becomes newline)
 ripdoc skelebuild inject '## Notes\nWhy this matters...' --after-target bat::config::Config
 
-# Inject from stdin to avoid shell-escaping issues
-ripdoc skelebuild inject --from-stdin --after-target bat::config::Config <<'EOF'
+# Inject from stdin (auto-detected, no --from-stdin needed!)
+ripdoc skelebuild inject --after-target bat::config::Config <<'EOF'
 ## Notes
 My commentary with 'quotes' and $variables
 EOF
+
+# Or with a pipe (also auto-detected)
+echo "## Notes" | ripdoc skelebuild inject --after-target bat::config::Config
 
 # Other commands
 ripdoc skelebuild preview      # print output without writing file
@@ -45,11 +48,14 @@ ripdoc skelebuild remove bat::assets::get_acknowledgements
 - **Defaults**: `add` includes implementation spans, resolves private items, and uses plain (flat) output.
 - **Opt-out flags**: `--no-implementation` (signatures only), `--no-private` (public API only).
 - **Injection placement**: Prefer `--after-target <spec>` / `--before-target <spec>` over `--at <index>` (indices shift).
+- **Auto-stdin**: `inject` automatically reads from stdin when piping or using heredocs (no `--from-stdin` needed).
+- **Canonical keys**: `add-file` and `add-raw` print canonical repo-relative keys for easy matching.
 - **Impl-block targeting**: Target an entire impl with `Type::Trait` (e.g. `Editor::EditorOps`).
 - **Raw source**: Use `add-raw path:START:END` or `add-file path` for code not in rustdoc.
 - **Validation**: `add` validates by default; use `--no-validate` to skip.
 - **Inject escaping**: `\n`, `\t`, `\\` are unescaped by default; use `--literal` to keep backslashes.
 - **Errors to stderr**: Warnings/errors go to stderr, keeping the output doc clean.
+- **Empty results**: `add-changed` shows detailed diagnostics when no hunks are found.
 
 ## Target Resolution
 

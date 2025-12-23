@@ -2,65 +2,65 @@
 
 OVERALL GOAL: Skelebuild UX Hardening
 
-## P0 — Make `inject` work with heredoc/pipes by default
+## P0 — Make `inject` work with heredoc/pipes by default ✅ DONE
 
-- [ ] Update `ripdoc skelebuild inject` to auto-read stdin when `<CONTENT>` is missing and stdin is **not** a TTY.
-  - [ ] Detection: if positional `<CONTENT>` not provided AND `stdin.is_terminal()` is false, treat input as if `--from-stdin` was passed.
-  - [ ] Ensure behavior works for:
-    - [ ] `cat file | ripdoc skelebuild inject --at 0`
-    - [ ] `ripdoc skelebuild inject --at 0 <<'EOF' ... EOF`
-  - [ ] Ensure behavior does **not** trigger when:
-    - [ ] User is typing in an interactive terminal (stdin is a TTY).
-    - [ ] `<CONTENT>` is provided positionally.
-- [ ] Add an explicit error message when `<CONTENT>` is missing and stdin **is** a TTY.
-  - [ ] Replace/override the Clap “required arguments were not provided: <CONTENT>” path for this command.
-  - [ ] Error text MUST include exact next steps (copy/paste ready):
-    - [ ] `ripdoc skelebuild inject --from-stdin --at 0 <<'EOF' ... EOF`
-    - [ ] `ripdoc skelebuild inject --at 0 "your content here"`
-- [ ] Add CLI help examples for `inject` that include all supported input modes.
-  - [ ] Include examples for: positional, `--from-stdin` pipe, `--from-stdin` heredoc.
-  - [ ] Ensure `ripdoc skelebuild inject --help` shows these examples.
+- [x] Update `ripdoc skelebuild inject` to auto-read stdin when `<CONTENT>` is missing and stdin is **not** a TTY.
+  - [x] Detection: if positional `<CONTENT>` not provided AND `stdin.is_terminal()` is false, treat input as if `--from-stdin` was passed.
+  - [x] Ensure behavior works for:
+    - [x] `cat file | ripdoc skelebuild inject --at 0`
+    - [x] `ripdoc skelebuild inject --at 0 <<'EOF' ... EOF`
+  - [x] Ensure behavior does **not** trigger when:
+    - [x] User is typing in an interactive terminal (stdin is a TTY).
+    - [x] `<CONTENT>` is provided positionally.
+- [x] Add an explicit error message when `<CONTENT>` is missing and stdin **is** a TTY.
+  - [x] Replace/override the Clap "required arguments were not provided: <CONTENT>" path for this command.
+  - [x] Error text MUST include exact next steps (copy/paste ready):
+    - [x] `ripdoc skelebuild inject --from-stdin --at 0 <<'EOF' ... EOF`
+    - [x] `ripdoc skelebuild inject --at 0 "your content here"`
+- [x] Add CLI help examples for `inject` that include all supported input modes.
+  - [x] Include examples for: positional, `--from-stdin` pipe, `--from-stdin` heredoc.
+  - [x] Ensure `ripdoc skelebuild inject --help` shows these examples.
 
-## P0 — Make `add-changed` explain empty results (no-hunks) deterministically
+## P0 — Make `add-changed` explain empty results (no-hunks) deterministically ✅ DONE
 
-- [ ] Extend `ripdoc skelebuild add-changed` to emit a structured “why empty” report when no hunks are found.
-  - [ ] Always print the resolved revspec(s) used (the exact string passed).
-  - [ ] Print counts in a fixed format:
-    - [ ] total changed files discovered
-    - [ ] total hunks discovered before filtering
-    - [ ] files filtered out by `--only-rust`
-    - [ ] hunks filtered out by `--only-rust`
-- [ ] When `--only-rust` is present and it filtered everything, print a prescriptive message:
-  - [ ] “All changes were filtered out by `--only-rust`” (exact phrase).
-  - [ ] Print a list of the changed files that were excluded (at least first 20; if more, print “+N more”).
-- [ ] Add a built-in hint generator for common revspec mistakes when empty results occur.
-  - [ ] If the revspec range contains only non-rust file changes and `--only-rust` is set, print:
-    - [ ] “Try expanding the range (e.g. `HEAD~2..HEAD`) or removing `--only-rust`.”
-  - [ ] Do **not** guess a specific alternate range unless you can compute a safe one (see next task).
-- [ ] (Optional but deterministic) If repository has at least one earlier commit in range with rust changes, compute and print one concrete suggestion.
-  - [ ] Implement: walk backwards up to 50 commits from `HEAD` until a commit touches `*.rs`.
-  - [ ] Suggest: `--git <that_commit>..HEAD` (exact command string).
-  - [ ] If not found in 50 commits, print “No Rust-touching commit found in last 50 commits.”
+- [x] Extend `ripdoc skelebuild add-changed` to emit a structured "why empty" report when no hunks are found.
+  - [x] Always print the resolved revspec(s) used (the exact string passed).
+  - [x] Print counts in a fixed format:
+    - [x] total changed files discovered
+    - [x] total hunks discovered before filtering
+    - [x] files filtered out by `--only-rust`
+    - [x] hunks filtered out by `--only-rust`
+- [x] When `--only-rust` is present and it filtered everything, print a prescriptive message:
+  - [x] "All changes were filtered out by `--only-rust`" (exact phrase).
+  - [x] Print a list of the changed files that were excluded (at least first 20; if more, print "+N more").
+- [x] Add a built-in hint generator for common revspec mistakes when empty results occur.
+  - [x] If the revspec range contains only non-rust file changes and `--only-rust` is set, print:
+    - [x] "Try expanding the range (e.g. `HEAD~2..HEAD`) or removing `--only-rust`."
+  - [x] Do **not** guess a specific alternate range unless you can compute a safe one (see next task).
+- [x] (Optional but deterministic) If repository has at least one earlier commit in range with rust changes, compute and print one concrete suggestion.
+  - [x] Implement: walk backwards up to 50 commits from `HEAD` until a commit touches `*.rs`.
+  - [x] Suggest: `--git <that_commit>..HEAD` (exact command string).
+  - [x] If not found in 50 commits, print "No Rust-touching commit found in last 50 commits."
 
-## P0 — Canonicalize file entry keys so `add-file` targets always match later commands
+## P0 — Canonicalize file entry keys so `add-file` targets always match later commands ✅ DONE
 
-- [ ] Change `add-file` storage format to include a canonical, stable match key:
-  - [ ] Canonical key MUST be the **repo-root-relative** path using forward slashes (POSIX style), e.g. `crates/gala_proxy/src/push.rs`.
-  - [ ] Always store the original absolute path as metadata, but do not use it as the primary match key.
-- [ ] Update all “entry lookup by spec” paths (including `inject --after-target/--before-target`) to match file entries by:
-  - [ ] exact canonical repo-relative path
-  - [ ] exact absolute path (backward compatibility)
-  - [ ] exact match on a canonicalized version of user input (normalize `./`, redundant separators)
-- [ ] Update `add-file` output to print the exact canonical key in a machine-copyable line.
-  - [ ] Format MUST be:
-    - [ ] `Entry key: <canonical_key>`
-  - [ ] Also print a ready-to-run inject command using that key:
-    - [ ] `ripdoc skelebuild inject --after-target "<canonical_key>" --from-stdin <<'EOF' ... EOF`
-- [ ] Add regression tests to ensure canonicalization and matching behave identically on:
-  - [ ] `./crates/.../push.rs`
-  - [ ] `crates/.../push.rs`
-  - [ ] absolute path `/home/.../crates/.../push.rs`
-  - [ ] mixed separators or redundant path segments.
+- [x] Change `add-file` storage format to include a canonical, stable match key:
+  - [x] Canonical key MUST be the **repo-root-relative** path using forward slashes (POSIX style), e.g. `crates/gala_proxy/src/push.rs`.
+  - [x] Always store the original absolute path as metadata, but do not use it as the primary match key.
+- [x] Update all "entry lookup by spec" paths (including `inject --after-target/--before-target`) to match file entries by:
+  - [x] exact canonical repo-relative path
+  - [x] exact absolute path (backward compatibility)
+  - [x] exact match on a canonicalized version of user input (normalize `./`, redundant separators)
+- [x] Update `add-file` output to print the exact canonical key in a machine-copyable line.
+  - [x] Format MUST be:
+    - [x] `Entry key: <canonical_key>`
+  - [x] Also print a ready-to-run inject command using that key:
+    - [x] `ripdoc skelebuild inject --after-target "<canonical_key>" --from-stdin <<'EOF' ... EOF`
+- [x] Add regression tests to ensure canonicalization and matching behave identically on:
+  - [x] `./crates/.../push.rs`
+  - [x] `crates/.../push.rs`
+  - [x] absolute path `/home/.../crates/.../push.rs`
+  - [x] mixed separators or redundant path segments.
 
 ## P1 — Remove confusion between “target” entries and “non-target” entries for insertion commands
 

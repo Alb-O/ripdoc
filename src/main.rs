@@ -317,9 +317,27 @@ enum SkelebuildSubcommand {
 		output: Option<std::path::PathBuf>,
 	},
 	/// Inject manual commentary.
+	///
+	/// Examples:
+	///   # Positional content
+	///   ripdoc skelebuild inject "## Notes\nMy commentary" --at 0
+	///
+	///   # From stdin (heredoc)
+	///   ripdoc skelebuild inject --at 0 <<'EOF'
+	///   ## Notes
+	///   My commentary
+	///   EOF
+	///
+	///   # From stdin (pipe)
+	///   cat notes.md | ripdoc skelebuild inject --at 0
+	///
+	///   # From file
+	///   ripdoc skelebuild inject --from-file notes.md --at 0
+	///
+	///   # After a target
+	///   ripdoc skelebuild inject "## Context" --after-target crate::module::Type
 	Inject {
 		/// Text to inject.
-		#[arg(required_unless_present_any = ["from_stdin", "from_file"])]
 		content: Option<String>,
 
 		/// Read injection content from stdin.
@@ -551,6 +569,41 @@ fn git_diff_text(rev_spec: Option<&str>, staged: bool) -> Result<String, Box<dyn
 		return Err("Failed to run `git diff --unified=0`".into());
 	}
 	Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Find a commit that touches Rust files by walking back from HEAD.
+/// Returns the commit hash if found within the limit.
+fn find_rust_touching_commit(limit: usize) -> Result<String, Box<dyn Error>> {
+	// Get the last N commits
+	let output = ProcessCommand::new("git")
+		.args(["log", &format!("-{}", limit), "--format=%H"])
+		.output()?;
+	
+	if !output.status.success() {
+		return Err("Failed to run `git log`".into());
+	}
+	
+	let commits = String::from_utf8_lossy(&output.stdout);
+	for commit in commits.lines() {
+		let commit = commit.trim();
+		if commit.is_empty() {
+			continue;
+		}
+		
+		// Check if this commit touches any .rs files
+		let files_output = ProcessCommand::new("git")
+			.args(["diff-tree", "--no-commit-id", "--name-only", "-r", commit])
+			.output()?;
+		
+		if files_output.status.success() {
+			let files = String::from_utf8_lossy(&files_output.stdout);
+			if files.lines().any(|f| f.trim().ends_with(".rs")) {
+				return Ok(commit.to_string());
+			}
+		}
+	}
+	
+	Err("No Rust-touching commit found".into())
 }
 
 fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool) -> Vec<DiffHunk> {
@@ -1391,30 +1444,101 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							spec: file.display().to_string(),
 						})
 					}
-					SkelebuildSubcommand::AddChanged {
-						git,
-						staged,
-						only_rust,
-						output: o,
-					} => {
-						if o.is_some() {
-							output = o;
-						}
-						let git_root = git_toplevel()?;
-						let diff = git_diff_text(git.as_deref(), staged)?;
-						let hunks = parse_git_diff_hunks(&diff, &git_root, only_rust);
-						if hunks.is_empty() {
-							println!("No changed hunks found.");
-							return Ok(());
-						}
-						let (targets, raw_specs) =
-							resolve_changed_context(&hunks, &rs, &args.common)?;
-						if targets.is_empty() && raw_specs.is_empty() {
-							println!("No changed context could be resolved.");
-							return Ok(());
-						}
-						Some(SkeleAction::AddChangedResolved { targets, raw_specs })
+				SkelebuildSubcommand::AddChanged {
+					git,
+					staged,
+					only_rust,
+					output: o,
+				} => {
+					if o.is_some() {
+						output = o;
 					}
+					let git_root = git_toplevel()?;
+					let revspec = git.as_deref().unwrap_or(if staged { "--cached" } else { "HEAD" });
+					
+					eprintln!("Analyzing changes (revspec: {})...", revspec);
+					
+					let diff = git_diff_text(git.as_deref(), staged)?;
+					let all_hunks = parse_git_diff_hunks(&diff, &git_root, false);
+					let filtered_hunks = if only_rust {
+						parse_git_diff_hunks(&diff, &git_root, true)
+					} else {
+						all_hunks.clone()
+					};
+					
+					// Count unique changed files
+					let mut all_files = std::collections::BTreeSet::new();
+					let mut filtered_files = std::collections::BTreeSet::new();
+					for hunk in &all_hunks {
+						all_files.insert(hunk.file.clone());
+					}
+					for hunk in &filtered_hunks {
+						filtered_files.insert(hunk.file.clone());
+					}
+					
+					if filtered_hunks.is_empty() {
+						// Print structured empty report
+						eprintln!("\nNo changed hunks found.");
+						eprintln!("\nDiagnostics:");
+						eprintln!("  Resolved revspec: {}", revspec);
+						eprintln!("  Total changed files discovered: {}", all_files.len());
+						eprintln!("  Total hunks discovered (before filtering): {}", all_hunks.len());
+						
+						if only_rust {
+							let files_filtered = all_files.len() - filtered_files.len();
+							let hunks_filtered = all_hunks.len() - filtered_hunks.len();
+							eprintln!("  Files filtered out by --only-rust: {}", files_filtered);
+							eprintln!("  Hunks filtered out by --only-rust: {}", hunks_filtered);
+							
+							if hunks_filtered > 0 {
+								eprintln!("\nAll changes were filtered out by `--only-rust`.");
+								eprintln!("\nExcluded files (first 20):");
+								let non_rust_files: Vec<_> = all_files.difference(&filtered_files).collect();
+								for (i, file) in non_rust_files.iter().take(20).enumerate() {
+									eprintln!("  {}. {}", i + 1, file.display());
+								}
+								if non_rust_files.len() > 20 {
+									eprintln!("  ... and {} more", non_rust_files.len() - 20);
+								}
+								eprintln!("\nSuggestions:");
+								eprintln!("  - Try removing --only-rust to include all changed files");
+								eprintln!("  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)");
+							}
+						} else {
+							eprintln!("\nSuggestions:");
+							eprintln!("  - Verify the revspec is correct: {}", revspec);
+							eprintln!("  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)");
+							if !staged {
+								eprintln!("  - Or use --staged to check staged changes");
+							}
+						}
+						
+						// Optional: compute a concrete suggestion by walking back
+						if only_rust {
+							eprintln!("\nSearching for recent Rust-touching commits...");
+							if let Ok(suggestion) = find_rust_touching_commit(50) {
+								eprintln!("  Found commit: {}", suggestion);
+								eprintln!("  Try: ripdoc skelebuild add-changed --git {}..HEAD --only-rust", suggestion);
+							} else {
+								eprintln!("  No Rust-touching commit found in last 50 commits.");
+							}
+						}
+						
+						return Ok(());
+					}
+					let (targets, raw_specs) =
+						resolve_changed_context(&filtered_hunks, &rs, &args.common)?;
+					if targets.is_empty() && raw_specs.is_empty() {
+						eprintln!("No changed context could be resolved.");
+						eprintln!("\nDiagnostics:");
+						eprintln!("  Hunks found: {}", filtered_hunks.len());
+						eprintln!("  Files changed: {}", filtered_files.len());
+						eprintln!("\nNote: Hunks were found but couldn't be resolved to rustdoc targets.");
+						eprintln!("      This may happen if changes are in files without rustdoc coverage.");
+						return Ok(());
+					}
+					Some(SkeleAction::AddChangedResolved { targets, raw_specs })
+				}
 					SkelebuildSubcommand::Update {
 						spec,
 						implementation,
@@ -1446,41 +1570,74 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							raw_source: raw_value,
 						})
 					}
-					SkelebuildSubcommand::Inject {
+				SkelebuildSubcommand::Inject {
+					content,
+					from_stdin,
+					from_file,
+					literal,
+					after,
+					after_target,
+					before_target,
+					at,
+					output: o,
+				} => {
+					if o.is_some() {
+						output = o;
+					}
+
+					use std::io::{IsTerminal, Read};
+					
+					let content = if from_stdin {
+						// Explicit --from-stdin flag
+						let mut buf = String::new();
+						std::io::stdin().read_to_string(&mut buf)?;
+						buf
+					} else if let Some(path) = from_file {
+						// Read from file
+						std::fs::read_to_string(path)?
+					} else if let Some(c) = content {
+						// Positional content provided
+						c
+					} else {
+						// No content, no --from-stdin, no --from-file
+						// Auto-detect: if stdin is not a TTY, read from it
+						if !std::io::stdin().is_terminal() {
+							let mut buf = String::new();
+							std::io::stdin().read_to_string(&mut buf)?;
+							buf
+						} else {
+							// stdin is a TTY and no content provided
+							return Err(
+								"Missing required argument: <CONTENT>\n\n\
+								The `inject` command requires content to inject. You can provide it in one of these ways:\n\n\
+								  1. As a positional argument:\n\
+								     ripdoc skelebuild inject \"your content here\" --at 0\n\n\
+								  2. Via stdin with a heredoc:\n\
+								     ripdoc skelebuild inject --at 0 <<'EOF'\n\
+								     your content here\n\
+								     EOF\n\n\
+								  3. Via stdin with a pipe:\n\
+								     cat file | ripdoc skelebuild inject --at 0\n\n\
+								  4. Explicitly from stdin:\n\
+								     ripdoc skelebuild inject --from-stdin --at 0 <<'EOF'\n\
+								     your content here\n\
+								     EOF\n\n\
+								  5. From a file:\n\
+								     ripdoc skelebuild inject --from-file path/to/file.txt --at 0"
+									.into(),
+							);
+						}
+					};
+
+					Some(SkeleAction::Inject {
 						content,
-						from_stdin,
-						from_file,
 						literal,
 						after,
 						after_target,
 						before_target,
 						at,
-						output: o,
-					} => {
-						if o.is_some() {
-							output = o;
-						}
-
-						let content = if from_stdin {
-							use std::io::Read;
-							let mut buf = String::new();
-							std::io::stdin().read_to_string(&mut buf)?;
-							buf
-						} else if let Some(path) = from_file {
-							std::fs::read_to_string(path)?
-						} else {
-							content.unwrap_or_default()
-						};
-
-						Some(SkeleAction::Inject {
-							content,
-							literal,
-							after,
-							after_target,
-							before_target,
-							at,
-						})
-					}
+					})
+				}
 
 					SkelebuildSubcommand::Remove { target, output: o } => {
 						if o.is_some() {
