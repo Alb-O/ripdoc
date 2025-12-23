@@ -204,6 +204,7 @@ pub fn validate_add_target_or_error(
 	target_spec: &str,
 	ripdoc: &Ripdoc,
 	include_private: bool,
+	strict: bool,
 ) -> Result<ValidatedTargetInfo> {
 	let parsed = crate::cargo_utils::target::Target::parse(target_spec)?;
 	if parsed.path.is_empty() {
@@ -263,6 +264,8 @@ pub fn validate_add_target_or_error(
 
 	let mut matched_path: Option<String> = None;
 	let mut matched_id: Option<rustdoc_types::Id> = None;
+	
+	// Try original query first
 	if let Some(best) = resolve_best_path_match(
 		&index,
 		crate_name.as_deref(),
@@ -285,15 +288,70 @@ pub fn validate_add_target_or_error(
 		matched_path = Some(base_query.clone());
 		matched_id = Some(impl_id);
 	}
+	
+	// If no match and query starts with something other than crate name,
+	// try replacing first segment with "crate" (unless --strict is set)
+	if matched_id.is_none() && !strict {
+		if let Some((first, rest)) = base_query.split_once("::") {
+			if let Some(ref actual_crate) = crate_name {
+				if first != actual_crate && first != "crate" {
+					let crate_query = format!("crate::{}", rest);
+					
+					if let Some(best) = resolve_best_path_match(
+						&index,
+						crate_name.as_deref(),
+						&pkg_root,
+						&crate_query,
+						is_local,
+						include_private,
+					) {
+						matched_path = Some(best.path_string);
+						matched_id = Some(best.item_id);
+						eprintln!("Interpreted `{}` as `{}`", base_query, crate_query);
+					} else if let Some((_ty_match, impl_id)) = resolve_impl_target(
+						&index,
+						&crate_data,
+						crate_name.as_deref(),
+						&pkg_root,
+						&crate_query,
+						is_local,
+						include_private,
+					) {
+						matched_path = Some(crate_query.clone());
+						matched_id = Some(impl_id);
+						eprintln!("Interpreted `{}` as `{}`", base_query, crate_query);
+					}
+				}
+			}
+		}
+	}
 
 	let Some(matched_id) = matched_id else {
+		// Generate smart suggestions when no match found
 		let last_segment = base_query.rsplit("::").next().unwrap_or(&base_query);
+		
+		// Search by name
 		let mut options = SearchOptions::new(last_segment);
 		options.domains = SearchDomain::PATHS | SearchDomain::NAMES;
 		options.include_private = true;
 		let mut results = index.search(&options);
 		results.retain(|r| is_local(r));
-		results.sort_by_key(|r| r.path_string.len());
+		
+		// Prioritize results:
+		// 1. Exact name match (highest priority)
+		// 2. Path suffix match (e.g., user typed "module::Item", we match "crate::module::Item")
+		// 3. Shortest paths (simpler is better)
+		results.sort_by_key(|r| {
+			let exact_name = r.raw_name != last_segment;
+			let suffix_match = if base_query.contains("::") {
+				!r.path_string.ends_with(&format!("::{}", base_query))
+			} else {
+				true // not a suffix search
+			};
+			let path_len = r.path_string.len();
+			(exact_name, suffix_match, path_len)
+		});
+		
 		results.truncate(5);
 		let suggestions = results
 			.iter()

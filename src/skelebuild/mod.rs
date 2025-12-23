@@ -54,7 +54,7 @@ pub fn run_skelebuild(
 	}
 
 	let config_changed = state.output_path != prev_output_path || state.plain != prev_plain;
-	let show_state_on_exit = show_state || matches!(action.as_ref(), Some(SkeleAction::Status));
+	let show_state_on_exit = show_state || matches!(action.as_ref(), Some(SkeleAction::Status { .. }));
 	let mut action_summary: Option<String> = None;
 
 	let mut should_rebuild = false;
@@ -65,10 +65,11 @@ pub fn run_skelebuild(
 			raw_source,
 			validate,
 			private,
+			strict,
 		}) => {
 			let normalized_target = normalize_target_spec_for_storage(&target);
 			let validated = if validate {
-				Some(validate_add_target_or_error(&normalized_target, ripdoc, private)?)
+				Some(validate_add_target_or_error(&normalized_target, ripdoc, private, strict)?)
 			} else {
 				None
 			};
@@ -128,6 +129,7 @@ pub fn run_skelebuild(
 			raw_source,
 			validate,
 			private,
+			strict,
 		}) => {
 			let mut added: Vec<String> = Vec::new();
 			let mut added_indices: Vec<usize> = Vec::new();
@@ -135,7 +137,7 @@ pub fn run_skelebuild(
 			for target in targets {
 				let normalized_target = normalize_target_spec_for_storage(&target);
 				if validate {
-					let _ = validate_add_target_or_error(&normalized_target, ripdoc, private)?;
+					let _ = validate_add_target_or_error(&normalized_target, ripdoc, private, strict)?;
 				}
 				let is_present = state.entries.iter().any(|e| match e {
 					SkeleEntry::Target(t) => t.path == normalized_target,
@@ -492,7 +494,7 @@ pub fn run_skelebuild(
 			should_rebuild = true;
 			action_summary = Some("Rebuilt output.".to_string());
 		}
-		Some(SkeleAction::Status) | None => {
+		Some(SkeleAction::Status { keys }) => {
 			// Status is read-only, but if config changed we should rebuild.
 			if config_changed && !state.entries.is_empty() {
 				should_rebuild = true;
@@ -501,6 +503,35 @@ pub fn run_skelebuild(
 					state.plain,
 					state.output_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "-".to_string())
 				));
+			}
+			
+			// If --keys was requested, print keys and exit early
+			if keys {
+				for (idx, entry) in state.entries.iter().enumerate() {
+					let (entry_type, key) = match entry {
+						SkeleEntry::Target(t) => ("target", t.path.as_str()),
+						SkeleEntry::RawSource(r) => {
+							("raw", r.canonical_key.as_deref().unwrap_or_else(|| {
+								r.file.to_str().unwrap_or("<invalid-path>")
+							}))
+						}
+						SkeleEntry::Injection(_) => ("injection", "<no-key>"),
+					};
+					
+					if entry_type == "injection" {
+						// Skip injections since they don't have stable keys
+						continue;
+					}
+					
+					println!("{}  {}  {}", idx, entry_type, key);
+				}
+				return Ok(());
+			}
+		}
+		None => {
+			// No action specified
+			if config_changed && !state.entries.is_empty() {
+				should_rebuild = true;
 			}
 		}
 	}

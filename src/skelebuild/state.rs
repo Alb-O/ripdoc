@@ -100,6 +100,9 @@ pub enum SkeleAction {
 		validate: bool,
 		/// Whether to search private items.
 		private: bool,
+		/// Strict mode: disable heuristics during validation.
+		#[allow(dead_code)]
+		strict: bool,
 	},
 	/// Add multiple targets in one operation.
 	AddMany {
@@ -113,6 +116,9 @@ pub enum SkeleAction {
 		validate: bool,
 		/// Whether to search private items.
 		private: bool,
+		/// Strict mode: disable heuristics during validation.
+		#[allow(dead_code)]
+		strict: bool,
 	},
 	/// Add a raw source snippet from disk.
 	AddRaw {
@@ -160,7 +166,10 @@ pub enum SkeleAction {
 	/// Reset state.
 	Reset,
 	/// Show status.
-	Status,
+	Status {
+		/// Show keys in machine-parsable format.
+		keys: bool,
+	},
 	/// Preview the output to stdout.
 	Preview,
 	/// Rebuild output using current entries.

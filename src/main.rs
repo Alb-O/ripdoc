@@ -248,6 +248,10 @@ enum SkelebuildSubcommand {
 		#[arg(long = "no-validate", default_value_t = false)]
 		no_validate: bool,
 
+		/// Strict mode: disable all heuristics (no auto-rewriting crate prefixes).
+		#[arg(long, default_value_t = false)]
+		strict: bool,
+
 		/// Output file for the skeleton.
 		#[arg(short = 'O', long)]
 		output: Option<std::path::PathBuf>,
@@ -392,7 +396,11 @@ enum SkelebuildSubcommand {
 		plain: bool,
 	},
 	/// Show current targets and output path.
-	Status,
+	Status {
+		/// Show entry keys in a machine-parsable format.
+		#[arg(long, default_value_t = false)]
+		keys: bool,
+	},
 	/// Preview the rebuilt output to stdout.
 	Preview,
 	/// Rebuild the output file without adding anything.
@@ -1388,6 +1396,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			private,
 			no_private,
 			no_validate,
+			strict,
 			output: o,
 			plain: p,
 		} => {
@@ -1418,6 +1427,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 					raw_source,
 					validate,
 					private: effective_private,
+					strict,
 				})
 			} else {
 				Some(SkeleAction::AddMany {
@@ -1426,6 +1436,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 					raw_source,
 					validate,
 					private: effective_private,
+					strict,
 				})
 			}
 		}
@@ -1657,7 +1668,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Reset)
 					}
-					SkelebuildSubcommand::Status => Some(SkeleAction::Status),
+					SkelebuildSubcommand::Status { keys } => Some(SkeleAction::Status { keys }),
 					SkelebuildSubcommand::Preview => Some(SkeleAction::Preview),
 					SkelebuildSubcommand::Rebuild => Some(SkeleAction::Rebuild),
 				}

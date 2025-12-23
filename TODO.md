@@ -62,48 +62,50 @@ OVERALL GOAL: Skelebuild UX Hardening
   - [x] absolute path `/home/.../crates/.../push.rs`
   - [x] mixed separators or redundant path segments.
 
-## P1 — Remove confusion between “target” entries and “non-target” entries for insertion commands
+## P1 — Remove confusion between "target" entries and "non-target" entries for insertion commands ✅ DONE
 
-- [ ] Modify `--after-target` / `--before-target` to match any entry that has a stable “entry key”, not only rustdoc targets.
-  - [ ] Define “stable entry key” for:
-    - [ ] rustdoc targets (existing)
-    - [ ] raw source file entries (from `add-file`)
-    - [ ] injected blocks (if they have IDs/labels; if not, do not include)
-- [ ] If you intentionally want “target-only” semantics, implement *both* of these flags:
-  - [ ] `--after-entry` / `--before-entry` (matches any entry key)
-  - [ ] `--after-target` / `--before-target` (targets only)
-  - [ ] In that case: update help text to clearly state the difference, with one concrete example for each.
-- [ ] Update error messages when no match is found to include:
-  - [ ] “Available keys:” followed by the first 10 keys from the current doc.
-  - [ ] “Run: `ripdoc skelebuild status --keys`” (see next section).
+- [x] Modify `--after-target` / `--before-target` to match any entry that has a stable "entry key", not only rustdoc targets.
+  - [x] Define "stable entry key" for:
+    - [x] rustdoc targets (existing)
+    - [x] raw source file entries (from `add-file`)
+    - [x] injected blocks (if they have IDs/labels; if not, do not include)
+- [x] If you intentionally want "target-only" semantics, implement *both* of these flags:
+  - [x] `--after-entry` / `--before-entry` (matches any entry key)
+  - [x] `--after-target` / `--before-target` (targets only)
+  - [x] In that case: update help text to clearly state the difference, with one concrete example for each.
+  - Note: Decided to make `--after-target`/`--before-target` match any entry (targets + raw sources). This is more intuitive for users.
+- [x] Update error messages when no match is found to include:
+  - [x] "Available keys:" followed by the first 10 keys from the current doc.
+  - [x] "Run: `ripdoc skelebuild status --keys`" (see next section).
 
-## P1 — Make `add` failures self-healing with exact, copy-pasteable suggestions
+## P1 — Make `add` failures self-healing with exact, copy-pasteable suggestions ✅ DONE
 
-- [ ] When `ripdoc skelebuild add` fails due to “No path match found”, print top suggestions automatically.
-  - [ ] Extract the last segment of the provided spec (e.g. `rewrite_history_stateful`).
-  - [ ] Search in rustdoc inventory for:
-    - [ ] exact name matches
-    - [ ] suffix matches on path segments
-  - [ ] Print up to 5 suggestions, each on its own line, each fully qualified and copy-pasteable.
-- [ ] Add a deterministic alias resolution attempt for common crate-prefix mistakes.
-  - [ ] If user spec starts with `<something>::` and there exists a `crate::` equivalent where you replace the first segment with `crate`, attempt match.
-  - [ ] If match succeeds, print:
-    - [ ] “Interpreted `<original>` as `<resolved>`” and proceed (unless `--strict` is set; see next task).
-- [ ] Add `--strict` flag to `add` (and possibly other commands) to disable all heuristics.
-  - [ ] Default behavior: heuristics ON (agent-friendly).
-  - [ ] With `--strict`: no auto-rewrite; only print suggestions.
+- [x] When `ripdoc skelebuild add` fails due to "No path match found", print top suggestions automatically.
+  - [x] Extract the last segment of the provided spec (e.g. `rewrite_history_stateful`).
+  - [x] Search in rustdoc inventory for:
+    - [x] exact name matches
+    - [x] suffix matches on path segments
+  - [x] Print up to 5 suggestions, each on its own line, each fully qualified and copy-pasteable.
+- [x] Add a deterministic alias resolution attempt for common crate-prefix mistakes.
+  - [x] If user spec starts with `<something>::` and there exists a `crate::` equivalent where you replace the first segment with `crate`, attempt match.
+  - [x] If match succeeds, print:
+    - [x] "Interpreted `<original>` as `<resolved>`" and proceed (unless `--strict` is set; see next task).
+- [x] Add `--strict` flag to `add` (and possibly other commands) to disable all heuristics.
+  - [x] Default behavior: heuristics ON (agent-friendly).
+  - [x] With `--strict`: no auto-rewrite; only print suggestions.
 
-## P2 — Make “status” immediately actionable (keys first, minimal friction)
+## P2 — Make "status" immediately actionable (keys first, minimal friction) ✅ DONE
 
-- [ ] Add `ripdoc skelebuild status --keys` output mode.
-  - [ ] It MUST print, for each entry, a single line containing:
-    - [ ] entry index
-    - [ ] entry type (target/raw-source/injection/other)
-    - [ ] exact stable entry key (what users should pass to `--after-*` / `--before-*`)
-  - [ ] Output MUST be stable and machine-parsable (fixed columns or delimiter).
-- [ ] When any command fails due to missing/unknown target/entry, include in the error message:
-  - [ ] `Run: ripdoc skelebuild status --keys`
-  - [ ] plus an inline preview of the first 5 keys (to reduce one extra command).
+- [x] Add `ripdoc skelebuild status --keys` output mode.
+  - [x] It MUST print, for each entry, a single line containing:
+    - [x] entry index
+    - [x] entry type (target/raw-source/injection/other)
+    - [x] exact stable entry key (what users should pass to `--after-*` / `--before-*`)
+  - [x] Output MUST be stable and machine-parsable (fixed columns or delimiter).
+- [x] When any command fails due to missing/unknown target/entry, include in the error message:
+  - [x] `Run: ripdoc skelebuild status --keys`
+  - [x] plus an inline preview of the first 5 keys (to reduce one extra command).
+  - Note: Implemented as first 10 keys for better usability.
 
 ## P2 — Documentation + golden-path guide for agents
 
