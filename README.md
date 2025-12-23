@@ -12,7 +12,7 @@ Ripdoc is built to be the "eyes" of an AI agent in a Rust codebase.
 
 For a dense techincal guide specifically for agent consumption:
 - `ripdoc agents` (general usage)
-- `ripdoc skelebuild agents` (skelebuild specific)
+- `ripdoc agents skelebuild` (skelebuild specific)
 
 There is no MCP server for this tool. Long live skills!
 

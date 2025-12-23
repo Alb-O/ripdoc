@@ -213,8 +213,6 @@ struct SkelebuildArgs {
 
 #[derive(Subcommand, Clone)]
 enum SkelebuildSubcommand {
-	/// Print the `skelebuild` agent guide.
-	Agents,
 	/// Add a target to the skeleton.
 	Add {
 		/// Target to add.
@@ -1383,10 +1381,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				Some(SkeleAction::Reset)
 			} else if let Some(cmd) = args.command {
 				match cmd {
-					SkelebuildSubcommand::Agents => {
-						print!("{}", include_str!("skelebuild/agents_skelebuild.md"));
-						return Ok(());
-					}
 		SkelebuildSubcommand::Add {
 			target,
 			items,
