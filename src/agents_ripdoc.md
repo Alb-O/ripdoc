@@ -3,28 +3,40 @@
 - Usage: `ripdoc <COMMAND> [TARGET] [OPTIONS]`
 - Targets: crates.io names (`serde`), `name@version`, or local paths (`./path/to/crate`).
 
-## Common flows
+## Commands
 
-- Print skeleton: `ripdoc print [target]`
-- Print a specific item (path mode): `ripdoc print [target] [ITEM]`
-  - Also supported: `ripdoc print ./path/to/crate::crate::Type`
-- Search: `ripdoc print [target] --search <query>`
-  - Domains: `--search-spec name,doc,signature,path`
-  - OR queries: `--search "init|clone|fetch"`
-- List items: `ripdoc list [target] [--search <query>]` (includes source locations)
-  - Tip: use `--search-spec path` to discover the exact `crate::...` path ripdoc expects.
-  - Note: for local *bin* crates, the rustdoc crate name is often the bin name (e.g. `binname::...`), not the folder/package name. `skelebuild` can usually match the suffix without the crate prefix.
-- Raw rustdoc JSON: `ripdoc raw [target]`
+- `ripdoc print` - render items as Markdown (see `ripdoc agents print`)
+- `ripdoc list` - list items with source locations
+- `ripdoc skelebuild` - stateful context builder (see `ripdoc agents skelebuild`)
+- `ripdoc raw` - output raw rustdoc JSON
 
-## Output knobs
+## Quick Examples
 
-- Source labels: `--no-source-labels`
-- Include implementation spans: `--implementation` (for containers, may include whole `impl` blocks for best detail)
-- Include whole files: `--raw-source` / `--source`
-- Color: auto-disabled when stdout isn’t a TTY; force off with `--no-color` or `NO_COLOR=1`.
+```bash
+# Print a crate or specific item
+ripdoc print serde
+ripdoc print serde::Deserialize
 
-## skelebuild
+# Search within a crate
+ripdoc print tokio --search "spawn"
 
-- Stateful builder: `ripdoc skelebuild add <target> [ITEM] [--implementation|--raw-source]`
-  - For local projects, use a path target: `ripdoc skelebuild add ./path/to/crate crate::Item`.
-- For more detailed usage of `skelebuild`, see `ripdoc agents skelebuild`.
+# Discover exact paths
+ripdoc list serde --search "Deserialize" --search-spec path
+
+# Build context incrementally
+ripdoc skelebuild add ./my-crate crate::Config
+```
+
+## Common Options
+
+- `--search <query>` - filter by regex pattern
+- `--search-spec name,doc,signature,path` - search domains
+- `--implementation` - include method bodies
+- `--raw-source` - include full source files
+- `--private` - include private items
+- `--features <list>` - enable crate features
+
+## Topic Guides
+
+- `ripdoc agents print` - detailed print command usage
+- `ripdoc agents skelebuild` - stateful context building

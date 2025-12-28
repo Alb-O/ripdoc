@@ -169,6 +169,8 @@ struct ReadmeArgs {
 #[derive(Debug, Clone, Copy, ValueEnum)]
 /// Optional topic for `ripdoc agents`.
 enum AgentsTopic {
+	/// Print command (`ripdoc print ...`).
+	Print,
 	/// Stateful skeleton builder (`ripdoc skelebuild ...`).
 	Skelebuild,
 }
@@ -408,6 +410,8 @@ enum SkelebuildSubcommand {
 #[derive(Subcommand, Clone)]
 enum Command {
 	/// Print a crate skeleton (default).
+	///
+	/// AI agents: see `ripdoc agents print` for detailed usage.
 	Print(PrintArgs),
 	/// Produce a structured item listing.
 	List(ListArgs),
@@ -420,11 +424,13 @@ enum Command {
 	/// Also supports topic guides, e.g. `ripdoc agents skelebuild`.
 	Agents(AgentsArgs),
 	/// Build a skeleton incrementally.
+	///
+	/// AI agents: see `ripdoc agents skelebuild` for detailed usage.
 	Skelebuild(SkelebuildArgs),
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = "Query Rust docs and crate API from the command line.\n\nAI agents: run `ripdoc agents` for a dense usage guide.")]
 /// Parsed command-line options for the ripdoc CLI.
 struct Cli {
 	#[command(subcommand)]
@@ -1355,6 +1361,9 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 		Command::Agents(args) => {
 			match args.topic {
 				None => print!("{}", include_str!("agents_ripdoc.md")),
+				Some(AgentsTopic::Print) => {
+					print!("{}", include_str!("agents_print.md"))
+				}
 				Some(AgentsTopic::Skelebuild) => {
 					print!("{}", include_str!("skelebuild/agents_skelebuild.md"))
 				}
