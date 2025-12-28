@@ -962,9 +962,6 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 					"Tip: discover the exact rustdoc path with: ripdoc list {} --search \"{}\" --search-spec path --private",
 					target, last_segment
 				);
-				println!(
-					"Tip: if the code isn't in rustdoc output, use `ripdoc skelebuild add-file <path>` or `ripdoc skelebuild add-raw <path[:start[:end]]>` to include raw source."
-				);
 			}
 			return Ok(());
 		}
