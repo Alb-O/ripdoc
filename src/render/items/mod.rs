@@ -157,12 +157,13 @@ pub fn render_item(
 
 	if state.selection_is_full_source(&item.id)
 		&& let Some(span) = &item.span
-			&& let Ok(source) =
-				crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-				&& extracted_source_looks_like_item(item, &source) {
-					state.visited.insert(item.id);
-					return format!("{source}\n\n");
-				}
+		&& let Ok(source) =
+			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
+		&& extracted_source_looks_like_item(item, &source)
+	{
+		state.visited.insert(item.id);
+		return format!("{source}\n\n");
+	}
 
 	let mut output = match &item.inner {
 		ItemEnum::Module(_) => render_module(state, path_prefix, item),

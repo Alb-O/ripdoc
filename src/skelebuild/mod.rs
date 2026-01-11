@@ -8,7 +8,8 @@ use std::path::PathBuf;
 
 pub use resolver::unescape_inject_content;
 use resolver::{
-	find_entry_match, find_target_match, normalize_target_spec_for_storage, validate_add_target_or_error,
+	find_entry_match, find_target_match, normalize_target_spec_for_storage,
+	validate_add_target_or_error,
 };
 pub use state::{SkeleAction, SkeleEntry, SkeleInjection, SkeleRawSource, SkeleState, SkeleTarget};
 
@@ -54,7 +55,8 @@ pub fn run_skelebuild(
 	}
 
 	let config_changed = state.output_path != prev_output_path || state.plain != prev_plain;
-	let show_state_on_exit = show_state || matches!(action.as_ref(), Some(SkeleAction::Status { .. }));
+	let show_state_on_exit =
+		show_state || matches!(action.as_ref(), Some(SkeleAction::Status { .. }));
 	let mut action_summary: Option<String> = None;
 
 	let mut should_rebuild = false;
@@ -69,7 +71,12 @@ pub fn run_skelebuild(
 		}) => {
 			let normalized_target = normalize_target_spec_for_storage(&target);
 			let validated = if validate {
-				Some(validate_add_target_or_error(&normalized_target, ripdoc, private, strict)?)
+				Some(validate_add_target_or_error(
+					&normalized_target,
+					ripdoc,
+					private,
+					strict,
+				)?)
 			} else {
 				None
 			};
@@ -137,7 +144,8 @@ pub fn run_skelebuild(
 			for target in targets {
 				let normalized_target = normalize_target_spec_for_storage(&target);
 				if validate {
-					let _ = validate_add_target_or_error(&normalized_target, ripdoc, private, strict)?;
+					let _ =
+						validate_add_target_or_error(&normalized_target, ripdoc, private, strict)?;
 				}
 				let is_present = state.entries.iter().any(|e| match e {
 					SkeleEntry::Target(t) => t.path == normalized_target,
@@ -217,7 +225,7 @@ pub fn run_skelebuild(
 				state.entries.push(SkeleEntry::RawSource(raw.clone()));
 				let index = state.entries.len() - 1;
 				should_rebuild = true;
-				
+
 				// Print canonical key and suggested inject command
 				let inject_example = if let Some(ref canonical) = raw.canonical_key {
 					format!(
@@ -227,7 +235,7 @@ pub fn run_skelebuild(
 				} else {
 					String::new()
 				};
-				
+
 				action_summary = Some(format!(
 					"Added raw source: {} (entry #{index}){}",
 					raw_source_summary(&raw),
@@ -446,7 +454,11 @@ pub fn run_skelebuild(
 			action_summary = Some(if changed {
 				let mut changes = Vec::new();
 				if target.implementation != prev_impl {
-					changes.push(if target.implementation { "+impl" } else { "-impl" });
+					changes.push(if target.implementation {
+						"+impl"
+					} else {
+						"-impl"
+					});
 				}
 				if target.raw_source != prev_raw_source {
 					changes.push(if target.raw_source { "+raw" } else { "-raw" });
@@ -501,28 +513,33 @@ pub fn run_skelebuild(
 				action_summary = Some(format!(
 					"Config changed (plain: {}, output: {}), rebuilding.",
 					state.plain,
-					state.output_path.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "-".to_string())
+					state
+						.output_path
+						.as_ref()
+						.map(|p| p.display().to_string())
+						.unwrap_or_else(|| "-".to_string())
 				));
 			}
-			
+
 			// If --keys was requested, print keys and exit early
 			if keys {
 				for (idx, entry) in state.entries.iter().enumerate() {
 					let (entry_type, key) = match entry {
 						SkeleEntry::Target(t) => ("target", t.path.as_str()),
-						SkeleEntry::RawSource(r) => {
-							("raw", r.canonical_key.as_deref().unwrap_or_else(|| {
-								r.file.to_str().unwrap_or("<invalid-path>")
-							}))
-						}
+						SkeleEntry::RawSource(r) => (
+							"raw",
+							r.canonical_key
+								.as_deref()
+								.unwrap_or_else(|| r.file.to_str().unwrap_or("<invalid-path>")),
+						),
 						SkeleEntry::Injection(_) => ("injection", "<no-key>"),
 					};
-					
+
 					if entry_type == "injection" {
 						// Skip injections since they don't have stable keys
 						continue;
 					}
-					
+
 					println!("{}  {}  {}", idx, entry_type, key);
 				}
 				return Ok(());
@@ -558,29 +575,33 @@ pub fn run_skelebuild(
 			"  State file: {}",
 			state::SkeleState::state_file().display()
 		);
-		println!("  Output: {} ({} lines)", output_path.display(), output_lines);
+		println!(
+			"  Output: {} ({} lines)",
+			output_path.display(),
+			output_lines
+		);
 		println!("  Entries: {}", state.entries.len());
 		for (idx, e) in state.entries.iter().enumerate() {
 			match e {
-			SkeleEntry::Target(t) => {
-				// Only show flags that differ from defaults
-				let mut flags = Vec::new();
-				if !t.implementation {
-					flags.push("no-impl");
+				SkeleEntry::Target(t) => {
+					// Only show flags that differ from defaults
+					let mut flags = Vec::new();
+					if !t.implementation {
+						flags.push("no-impl");
+					}
+					if t.raw_source {
+						flags.push("raw");
+					}
+					if !t.private {
+						flags.push("public");
+					}
+					let flags_str = if flags.is_empty() {
+						String::new()
+					} else {
+						format!(" [{}]", flags.join(", "))
+					};
+					println!("    {idx}: {}{flags_str}", t.path)
 				}
-				if t.raw_source {
-					flags.push("raw");
-				}
-				if !t.private {
-					flags.push("public");
-				}
-				let flags_str = if flags.is_empty() {
-					String::new()
-				} else {
-					format!(" [{}]", flags.join(", "))
-				};
-				println!("    {idx}: {}{flags_str}", t.path)
-			}
 				SkeleEntry::Injection(i) => {
 					let trimmed = i.content.trim();
 					let compact = trimmed.replace('\n', "\\n");
@@ -622,7 +643,7 @@ fn raw_source_summary(raw: &SkeleRawSource) -> String {
 	} else {
 		raw.file.display().to_string()
 	};
-	
+
 	match (raw.start_line, raw.end_line) {
 		(Some(start), Some(end)) if start == end => format!("{base}:{start}"),
 		(Some(start), Some(end)) => format!("{base}:{start}:{end}"),
@@ -715,20 +736,20 @@ fn compute_canonical_key(abs_path: &std::path::Path) -> Option<String> {
 		.args(["rev-parse", "--show-toplevel"])
 		.output()
 		.ok()?;
-	
+
 	if !git_root.status.success() {
 		return None;
 	}
-	
+
 	let root_str = String::from_utf8_lossy(&git_root.stdout);
 	let root = std::path::PathBuf::from(root_str.trim());
-	
+
 	// Try to get relative path from git root
 	let canonical = abs_path.canonicalize().ok()?;
 	let canonical_root = root.canonicalize().ok()?;
-	
+
 	let rel = canonical.strip_prefix(&canonical_root).ok()?;
-	
+
 	// Convert to POSIX-style forward slashes
 	let rel_str = rel.to_str()?;
 	Some(rel_str.replace('\\', "/"))

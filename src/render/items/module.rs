@@ -11,9 +11,9 @@ pub fn render_module(state: &mut RenderState, path_prefix: &str, item: &Item) ->
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-		{
-			return format!("{source}\n\n");
-		}
+	{
+		return format!("{source}\n\n");
+	}
 
 	let path_prefix = ppush(path_prefix, &render_name(item));
 

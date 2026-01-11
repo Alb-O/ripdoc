@@ -140,9 +140,9 @@ fn render_enum_variant(
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-		{
-			return format!("    {source},\n");
-		}
+	{
+		return format!("    {source},\n");
+	}
 
 	let mut output = docs(item);
 	let variant = extract_item!(item, ItemEnum::Variant);

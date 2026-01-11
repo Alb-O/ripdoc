@@ -179,9 +179,10 @@ pub fn extract_source(
 				line.replace_range(pos..pos + 3, "///");
 			}
 		} else if trimmed.starts_with("/*!")
-			&& let Some(pos) = line.find("/*!") {
-				line.replace_range(pos..pos + 3, "/**");
-			}
+			&& let Some(pos) = line.find("/*!")
+		{
+			line.replace_range(pos..pos + 3, "/**");
+		}
 		extracted.push(line);
 	}
 

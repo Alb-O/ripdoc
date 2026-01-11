@@ -430,7 +430,12 @@ enum Command {
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = "Query Rust docs and crate API from the command line.\n\nAI agents: run `ripdoc agents` for a dense usage guide.")]
+#[command(
+	author,
+	version,
+	about,
+	long_about = "Query Rust docs and crate API from the command line.\n\nAI agents: run `ripdoc agents` for a dense usage guide."
+)]
 /// Parsed command-line options for the ripdoc CLI.
 struct Cli {
 	#[command(subcommand)]
@@ -590,23 +595,23 @@ fn find_rust_touching_commit(limit: usize) -> Result<String, Box<dyn Error>> {
 	let output = ProcessCommand::new("git")
 		.args(["log", &format!("-{}", limit), "--format=%H"])
 		.output()?;
-	
+
 	if !output.status.success() {
 		return Err("Failed to run `git log`".into());
 	}
-	
+
 	let commits = String::from_utf8_lossy(&output.stdout);
 	for commit in commits.lines() {
 		let commit = commit.trim();
 		if commit.is_empty() {
 			continue;
 		}
-		
+
 		// Check if this commit touches any .rs files
 		let files_output = ProcessCommand::new("git")
 			.args(["diff-tree", "--no-commit-id", "--name-only", "-r", commit])
 			.output()?;
-		
+
 		if files_output.status.success() {
 			let files = String::from_utf8_lossy(&files_output.stdout);
 			if files.lines().any(|f| f.trim().ends_with(".rs")) {
@@ -614,7 +619,7 @@ fn find_rust_touching_commit(limit: usize) -> Result<String, Box<dyn Error>> {
 			}
 		}
 	}
-	
+
 	Err("No Rust-touching commit found".into())
 }
 
@@ -647,11 +652,10 @@ fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool)
 			}
 			let rel = path.strip_prefix("b/").unwrap_or(path);
 			let abs = git_root.join(rel);
-			if only_rust
-				&& abs.extension().and_then(|e| e.to_str()) != Some("rs") {
-					current_file = None;
-					continue;
-				}
+			if only_rust && abs.extension().and_then(|e| e.to_str()) != Some("rs") {
+				current_file = None;
+				continue;
+			}
 			current_file = Some(abs);
 			continue;
 		}
@@ -829,7 +833,9 @@ fn resolve_changed_context(
 						0
 					} else if end < range_start {
 						range_start - end
-					} else { begin.saturating_sub(range_end) };
+					} else {
+						begin.saturating_sub(range_end)
+					};
 
 					let kind_priority = match entry.kind {
 						SearchItemKind::Method
@@ -926,11 +932,13 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 	let mut target = args.target.clone();
 	let mut item_query = args.item.clone();
 
-	if args.search.is_none() && item_query.is_none()
-		&& let Some((split_target, split_query)) = split_path_target_spec(&args.target) {
-			target = split_target;
-			item_query = Some(split_query);
-		}
+	if args.search.is_none()
+		&& item_query.is_none()
+		&& let Some((split_target, split_query)) = split_path_target_spec(&args.target)
+	{
+		target = split_target;
+		item_query = Some(split_query);
+	}
 
 	let explicit_search = args.search.as_deref();
 	let implicit_search = item_query.as_deref();
@@ -1387,59 +1395,59 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 				Some(SkeleAction::Reset)
 			} else if let Some(cmd) = args.command {
 				match cmd {
-		SkelebuildSubcommand::Add {
-			target,
-			items,
-			implementation,
-			no_implementation,
-			raw_source,
-			private,
-			no_private,
-			no_validate,
-			strict,
-			output: o,
-			plain: p,
-		} => {
-			if o.is_some() {
-				output = o;
-			}
-			if p {
-				plain = Some(true);
-			}
+					SkelebuildSubcommand::Add {
+						target,
+						items,
+						implementation,
+						no_implementation,
+						raw_source,
+						private,
+						no_private,
+						no_validate,
+						strict,
+						output: o,
+						plain: p,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						if p {
+							plain = Some(true);
+						}
 
-			let validate = !no_validate;
-			let effective_private = private && !no_private;
-			let effective_implementation = implementation && !no_implementation;
-			let target_prefix = target.clone();
-			let targets: Vec<String> = if items.is_empty() {
-				vec![target]
-			} else {
-				items
-					.into_iter()
-					.map(|item| format!("{target_prefix}::{item}"))
-					.collect()
-			};
+						let validate = !no_validate;
+						let effective_private = private && !no_private;
+						let effective_implementation = implementation && !no_implementation;
+						let target_prefix = target.clone();
+						let targets: Vec<String> = if items.is_empty() {
+							vec![target]
+						} else {
+							items
+								.into_iter()
+								.map(|item| format!("{target_prefix}::{item}"))
+								.collect()
+						};
 
-			if targets.len() == 1 {
-				Some(SkeleAction::Add {
-					target: targets[0].clone(),
-					implementation: effective_implementation,
-					raw_source,
-					validate,
-					private: effective_private,
-					strict,
-				})
-			} else {
-				Some(SkeleAction::AddMany {
-					targets,
-					implementation: effective_implementation,
-					raw_source,
-					validate,
-					private: effective_private,
-					strict,
-				})
-			}
-		}
+						if targets.len() == 1 {
+							Some(SkeleAction::Add {
+								target: targets[0].clone(),
+								implementation: effective_implementation,
+								raw_source,
+								validate,
+								private: effective_private,
+								strict,
+							})
+						} else {
+							Some(SkeleAction::AddMany {
+								targets,
+								implementation: effective_implementation,
+								raw_source,
+								validate,
+								private: effective_private,
+								strict,
+							})
+						}
+					}
 
 					SkelebuildSubcommand::AddRaw { spec, output: o } => {
 						if o.is_some() {
@@ -1455,101 +1463,128 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							spec: file.display().to_string(),
 						})
 					}
-				SkelebuildSubcommand::AddChanged {
-					git,
-					staged,
-					only_rust,
-					output: o,
-				} => {
-					if o.is_some() {
-						output = o;
-					}
-					let git_root = git_toplevel()?;
-					let revspec = git.as_deref().unwrap_or(if staged { "--cached" } else { "HEAD" });
-					
-					eprintln!("Analyzing changes (revspec: {})...", revspec);
-					
-					let diff = git_diff_text(git.as_deref(), staged)?;
-					let all_hunks = parse_git_diff_hunks(&diff, &git_root, false);
-					let filtered_hunks = if only_rust {
-						parse_git_diff_hunks(&diff, &git_root, true)
-					} else {
-						all_hunks.clone()
-					};
-					
-					// Count unique changed files
-					let mut all_files = std::collections::BTreeSet::new();
-					let mut filtered_files = std::collections::BTreeSet::new();
-					for hunk in &all_hunks {
-						all_files.insert(hunk.file.clone());
-					}
-					for hunk in &filtered_hunks {
-						filtered_files.insert(hunk.file.clone());
-					}
-					
-					if filtered_hunks.is_empty() {
-						// Print structured empty report
-						eprintln!("\nNo changed hunks found.");
-						eprintln!("\nDiagnostics:");
-						eprintln!("  Resolved revspec: {}", revspec);
-						eprintln!("  Total changed files discovered: {}", all_files.len());
-						eprintln!("  Total hunks discovered (before filtering): {}", all_hunks.len());
-						
-						if only_rust {
-							let files_filtered = all_files.len() - filtered_files.len();
-							let hunks_filtered = all_hunks.len() - filtered_hunks.len();
-							eprintln!("  Files filtered out by --only-rust: {}", files_filtered);
-							eprintln!("  Hunks filtered out by --only-rust: {}", hunks_filtered);
-							
-							if hunks_filtered > 0 {
-								eprintln!("\nAll changes were filtered out by `--only-rust`.");
-								eprintln!("\nExcluded files (first 20):");
-								let non_rust_files: Vec<_> = all_files.difference(&filtered_files).collect();
-								for (i, file) in non_rust_files.iter().take(20).enumerate() {
-									eprintln!("  {}. {}", i + 1, file.display());
-								}
-								if non_rust_files.len() > 20 {
-									eprintln!("  ... and {} more", non_rust_files.len() - 20);
-								}
-								eprintln!("\nSuggestions:");
-								eprintln!("  - Try removing --only-rust to include all changed files");
-								eprintln!("  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)");
-							}
+					SkelebuildSubcommand::AddChanged {
+						git,
+						staged,
+						only_rust,
+						output: o,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
+						let git_root = git_toplevel()?;
+						let revspec =
+							git.as_deref()
+								.unwrap_or(if staged { "--cached" } else { "HEAD" });
+
+						eprintln!("Analyzing changes (revspec: {})...", revspec);
+
+						let diff = git_diff_text(git.as_deref(), staged)?;
+						let all_hunks = parse_git_diff_hunks(&diff, &git_root, false);
+						let filtered_hunks = if only_rust {
+							parse_git_diff_hunks(&diff, &git_root, true)
 						} else {
-							eprintln!("\nSuggestions:");
-							eprintln!("  - Verify the revspec is correct: {}", revspec);
-							eprintln!("  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)");
-							if !staged {
-								eprintln!("  - Or use --staged to check staged changes");
-							}
+							all_hunks.clone()
+						};
+
+						// Count unique changed files
+						let mut all_files = std::collections::BTreeSet::new();
+						let mut filtered_files = std::collections::BTreeSet::new();
+						for hunk in &all_hunks {
+							all_files.insert(hunk.file.clone());
 						}
-						
-						// Optional: compute a concrete suggestion by walking back
-						if only_rust {
-							eprintln!("\nSearching for recent Rust-touching commits...");
-							if let Ok(suggestion) = find_rust_touching_commit(50) {
-								eprintln!("  Found commit: {}", suggestion);
-								eprintln!("  Try: ripdoc skelebuild add-changed --git {}..HEAD --only-rust", suggestion);
+						for hunk in &filtered_hunks {
+							filtered_files.insert(hunk.file.clone());
+						}
+
+						if filtered_hunks.is_empty() {
+							// Print structured empty report
+							eprintln!("\nNo changed hunks found.");
+							eprintln!("\nDiagnostics:");
+							eprintln!("  Resolved revspec: {}", revspec);
+							eprintln!("  Total changed files discovered: {}", all_files.len());
+							eprintln!(
+								"  Total hunks discovered (before filtering): {}",
+								all_hunks.len()
+							);
+
+							if only_rust {
+								let files_filtered = all_files.len() - filtered_files.len();
+								let hunks_filtered = all_hunks.len() - filtered_hunks.len();
+								eprintln!(
+									"  Files filtered out by --only-rust: {}",
+									files_filtered
+								);
+								eprintln!(
+									"  Hunks filtered out by --only-rust: {}",
+									hunks_filtered
+								);
+
+								if hunks_filtered > 0 {
+									eprintln!("\nAll changes were filtered out by `--only-rust`.");
+									eprintln!("\nExcluded files (first 20):");
+									let non_rust_files: Vec<_> =
+										all_files.difference(&filtered_files).collect();
+									for (i, file) in non_rust_files.iter().take(20).enumerate() {
+										eprintln!("  {}. {}", i + 1, file.display());
+									}
+									if non_rust_files.len() > 20 {
+										eprintln!("  ... and {} more", non_rust_files.len() - 20);
+									}
+									eprintln!("\nSuggestions:");
+									eprintln!(
+										"  - Try removing --only-rust to include all changed files"
+									);
+									eprintln!(
+										"  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)"
+									);
+								}
 							} else {
-								eprintln!("  No Rust-touching commit found in last 50 commits.");
+								eprintln!("\nSuggestions:");
+								eprintln!("  - Verify the revspec is correct: {}", revspec);
+								eprintln!(
+									"  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)"
+								);
+								if !staged {
+									eprintln!("  - Or use --staged to check staged changes");
+								}
 							}
+
+							// Optional: compute a concrete suggestion by walking back
+							if only_rust {
+								eprintln!("\nSearching for recent Rust-touching commits...");
+								if let Ok(suggestion) = find_rust_touching_commit(50) {
+									eprintln!("  Found commit: {}", suggestion);
+									eprintln!(
+										"  Try: ripdoc skelebuild add-changed --git {}..HEAD --only-rust",
+										suggestion
+									);
+								} else {
+									eprintln!(
+										"  No Rust-touching commit found in last 50 commits."
+									);
+								}
+							}
+
+							return Ok(());
 						}
-						
-						return Ok(());
+						let (targets, raw_specs) =
+							resolve_changed_context(&filtered_hunks, &rs, &args.common)?;
+						if targets.is_empty() && raw_specs.is_empty() {
+							eprintln!("No changed context could be resolved.");
+							eprintln!("\nDiagnostics:");
+							eprintln!("  Hunks found: {}", filtered_hunks.len());
+							eprintln!("  Files changed: {}", filtered_files.len());
+							eprintln!(
+								"\nNote: Hunks were found but couldn't be resolved to rustdoc targets."
+							);
+							eprintln!(
+								"      This may happen if changes are in files without rustdoc coverage."
+							);
+							return Ok(());
+						}
+						Some(SkeleAction::AddChangedResolved { targets, raw_specs })
 					}
-					let (targets, raw_specs) =
-						resolve_changed_context(&filtered_hunks, &rs, &args.common)?;
-					if targets.is_empty() && raw_specs.is_empty() {
-						eprintln!("No changed context could be resolved.");
-						eprintln!("\nDiagnostics:");
-						eprintln!("  Hunks found: {}", filtered_hunks.len());
-						eprintln!("  Files changed: {}", filtered_files.len());
-						eprintln!("\nNote: Hunks were found but couldn't be resolved to rustdoc targets.");
-						eprintln!("      This may happen if changes are in files without rustdoc coverage.");
-						return Ok(());
-					}
-					Some(SkeleAction::AddChangedResolved { targets, raw_specs })
-				}
 					SkelebuildSubcommand::Update {
 						spec,
 						implementation,
@@ -1581,44 +1616,44 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							raw_source: raw_value,
 						})
 					}
-				SkelebuildSubcommand::Inject {
-					content,
-					from_stdin,
-					from_file,
-					literal,
-					after,
-					after_target,
-					before_target,
-					at,
-					output: o,
-				} => {
-					if o.is_some() {
-						output = o;
-					}
+					SkelebuildSubcommand::Inject {
+						content,
+						from_stdin,
+						from_file,
+						literal,
+						after,
+						after_target,
+						before_target,
+						at,
+						output: o,
+					} => {
+						if o.is_some() {
+							output = o;
+						}
 
-					use std::io::{IsTerminal, Read};
-					
-					let content = if from_stdin {
-						// Explicit --from-stdin flag
-						let mut buf = String::new();
-						std::io::stdin().read_to_string(&mut buf)?;
-						buf
-					} else if let Some(path) = from_file {
-						// Read from file
-						std::fs::read_to_string(path)?
-					} else if let Some(c) = content {
-						// Positional content provided
-						c
-					} else {
-						// No content, no --from-stdin, no --from-file
-						// Auto-detect: if stdin is not a TTY, read from it
-						if !std::io::stdin().is_terminal() {
+						use std::io::{IsTerminal, Read};
+
+						let content = if from_stdin {
+							// Explicit --from-stdin flag
 							let mut buf = String::new();
 							std::io::stdin().read_to_string(&mut buf)?;
 							buf
+						} else if let Some(path) = from_file {
+							// Read from file
+							std::fs::read_to_string(path)?
+						} else if let Some(c) = content {
+							// Positional content provided
+							c
 						} else {
-							// stdin is a TTY and no content provided
-							return Err(
+							// No content, no --from-stdin, no --from-file
+							// Auto-detect: if stdin is not a TTY, read from it
+							if !std::io::stdin().is_terminal() {
+								let mut buf = String::new();
+								std::io::stdin().read_to_string(&mut buf)?;
+								buf
+							} else {
+								// stdin is a TTY and no content provided
+								return Err(
 								"Missing required argument: <CONTENT>\n\n\
 								The `inject` command requires content to inject. You can provide it in one of these ways:\n\n\
 								  1. As a positional argument:\n\
@@ -1637,18 +1672,18 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 								     ripdoc skelebuild inject --from-file path/to/file.txt --at 0"
 									.into(),
 							);
-						}
-					};
+							}
+						};
 
-					Some(SkeleAction::Inject {
-						content,
-						literal,
-						after,
-						after_target,
-						before_target,
-						at,
-					})
-				}
+						Some(SkeleAction::Inject {
+							content,
+							literal,
+							after,
+							after_target,
+							before_target,
+							at,
+						})
+					}
 
 					SkelebuildSubcommand::Remove { target, output: o } => {
 						if o.is_some() {

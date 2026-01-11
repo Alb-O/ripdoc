@@ -10,10 +10,10 @@ pub fn render_function_item(state: &RenderState, item: &Item, is_trait_method: b
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-			&& extracted_source_looks_like_item(item, &source)
-		{
-			return format!("{source}\n\n");
-		}
+		&& extracted_source_looks_like_item(item, &source)
+	{
+		return format!("{source}\n\n");
+	}
 
 	let mut output = docs(item);
 	let function = extract_item!(item, ItemEnum::Function);
@@ -57,10 +57,10 @@ pub fn render_constant_item(state: &RenderState, item: &Item) -> String {
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-			&& extracted_source_looks_like_item(item, &source)
-		{
-			return format!("{source}\n\n");
-		}
+		&& extracted_source_looks_like_item(item, &source)
+	{
+		return format!("{source}\n\n");
+	}
 
 	let mut output = docs(item);
 
@@ -82,10 +82,10 @@ pub fn render_type_alias_item(state: &RenderState, item: &Item) -> String {
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-			&& extracted_source_looks_like_item(item, &source)
-		{
-			return format!("{source}\n\n");
-		}
+		&& extracted_source_looks_like_item(item, &source)
+	{
+		return format!("{source}\n\n");
+	}
 
 	let type_alias = extract_item!(item, ItemEnum::TypeAlias);
 	let mut output = docs(item);

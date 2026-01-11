@@ -211,11 +211,11 @@ pub fn render_struct_field(
 		&& let Some(span) = &field_item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-		{
-			let trimmed = source.trim();
-			let suffix = if trimmed.ends_with(',') { "\n" } else { ",\n" };
-			return format!("{source}{suffix}");
-		}
+	{
+		let trimmed = source.trim();
+		let suffix = if trimmed.ends_with(',') { "\n" } else { ",\n" };
+		return format!("{source}{suffix}");
+	}
 
 	let ty = extract_item!(field_item, ItemEnum::StructField);
 	let mut out = String::new();

@@ -267,20 +267,21 @@ impl Ripdoc {
 				for res in &results {
 					if let Some(item) = crate_data.index.get(&res.item_id)
 						&& let Some(span) = &item.span
-							&& seen_files.insert(span.filename.clone()) {
-								let abs_path = if span.filename.is_absolute() {
-									span.filename.clone()
-								} else {
-									rt.package_root().join(&span.filename)
-								};
-								if let Ok(content) = fs::read_to_string(&abs_path) {
-									raw_files_content.push_str(&format!(
-										"// ripdoc:source: {}\n\n{}\n\n",
-										span.filename.display(),
-										content
-									));
-								}
-							}
+						&& seen_files.insert(span.filename.clone())
+					{
+						let abs_path = if span.filename.is_absolute() {
+							span.filename.clone()
+						} else {
+							rt.package_root().join(&span.filename)
+						};
+						if let Ok(content) = fs::read_to_string(&abs_path) {
+							raw_files_content.push_str(&format!(
+								"// ripdoc:source: {}\n\n{}\n\n",
+								span.filename.display(),
+								content
+							));
+						}
+					}
 				}
 			}
 
@@ -419,20 +420,21 @@ impl Ripdoc {
 					for res in &results {
 						if let Some(item) = crate_data.index.get(&res.item_id)
 							&& let Some(span) = &item.span
-								&& seen_files.insert(span.filename.clone()) {
-									let abs_path = if span.filename.is_absolute() {
-										span.filename.clone()
-									} else {
-										rt.package_root().join(&span.filename)
-									};
-									if let Ok(content) = fs::read_to_string(&abs_path) {
-										raw_files_content.push_str(&format!(
-											"// ripdoc:source: {}\n\n{}\n\n",
-											span.filename.display(),
-											content
-										));
-									}
-								}
+							&& seen_files.insert(span.filename.clone())
+						{
+							let abs_path = if span.filename.is_absolute() {
+								span.filename.clone()
+							} else {
+								rt.package_root().join(&span.filename)
+							};
+							if let Ok(content) = fs::read_to_string(&abs_path) {
+								raw_files_content.push_str(&format!(
+									"// ripdoc:source: {}\n\n{}\n\n",
+									span.filename.display(),
+									content
+								));
+							}
+						}
 					}
 				}
 			}

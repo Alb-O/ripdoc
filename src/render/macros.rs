@@ -14,9 +14,9 @@ pub fn render_macro(state: &crate::render::state::RenderState, item: &Item) -> S
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-		{
-			return format!("{source}\n\n");
-		}
+	{
+		return format!("{source}\n\n");
+	}
 	use super::syntax::is_reserved_word;
 
 	let mut output = docs(item);
@@ -80,9 +80,9 @@ pub fn render_proc_macro(state: &crate::render::state::RenderState, item: &Item)
 		&& let Some(span) = &item.span
 		&& let Ok(source) =
 			crate::render::utils::extract_source(span, state.config.source_root.as_deref())
-		{
-			return format!("{source}\n\n");
-		}
+	{
+		return format!("{source}\n\n");
+	}
 	let mut output = docs(item);
 
 	let fn_name = render_name(item);
