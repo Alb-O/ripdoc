@@ -74,6 +74,7 @@ pub fn resolve_best_path_match(
 	base_query: &str,
 	is_local: impl Fn(&SearchResult) -> bool,
 	include_private: bool,
+	silent: bool,
 ) -> Option<SearchResult> {
 	let candidates = build_query_candidates(base_query, crate_name);
 	for candidate in candidates {
@@ -116,7 +117,7 @@ pub fn resolve_best_path_match(
 			)
 		});
 
-		if pool.len() > 1 {
+		if pool.len() > 1 && !silent {
 			eprintln!(
 				"Warning: ambiguous match for `{}` in `{}`; using `{}`",
 				base_query,
@@ -139,13 +140,22 @@ pub fn resolve_impl_target(
 	base_query: &str,
 	is_local: impl Fn(&SearchResult) -> bool,
 	include_private: bool,
+	silent: bool,
 ) -> Option<(SearchResult, rustdoc_types::Id)> {
 	let (type_query, trait_name) = base_query.rsplit_once("::")?;
 	if trait_name.is_empty() {
 		return None;
 	}
 
-	let ty_match = resolve_best_path_match(index, crate_name, pkg_root, type_query, &is_local, include_private)?;
+	let ty_match = resolve_best_path_match(
+		index,
+		crate_name,
+		pkg_root,
+		type_query,
+		&is_local,
+		include_private,
+		silent,
+	)?;
 	if !matches!(
 		ty_match.kind,
 		SearchItemKind::Struct | SearchItemKind::Enum | SearchItemKind::Union
@@ -264,7 +274,9 @@ pub fn validate_add_target_or_error(
 
 	let mut matched_path: Option<String> = None;
 	let mut matched_id: Option<rustdoc_types::Id> = None;
-	
+
+	let silent = ripdoc.silent();
+
 	// Try original query first
 	if let Some(best) = resolve_best_path_match(
 		&index,
@@ -273,6 +285,7 @@ pub fn validate_add_target_or_error(
 		&base_query,
 		is_local,
 		include_private,
+		silent,
 	) {
 		matched_path = Some(best.path_string);
 		matched_id = Some(best.item_id);
@@ -284,11 +297,12 @@ pub fn validate_add_target_or_error(
 		&base_query,
 		is_local,
 		include_private,
+		silent,
 	) {
 		matched_path = Some(base_query.clone());
 		matched_id = Some(impl_id);
 	}
-	
+
 	// If no match and query starts with something other than crate name,
 	// try replacing first segment with "crate" (unless --strict is set)
 	if matched_id.is_none() && !strict {
@@ -296,7 +310,7 @@ pub fn validate_add_target_or_error(
 			if let Some(ref actual_crate) = crate_name {
 				if first != actual_crate && first != "crate" {
 					let crate_query = format!("crate::{}", rest);
-					
+
 					if let Some(best) = resolve_best_path_match(
 						&index,
 						crate_name.as_deref(),
@@ -304,10 +318,13 @@ pub fn validate_add_target_or_error(
 						&crate_query,
 						is_local,
 						include_private,
+						silent,
 					) {
 						matched_path = Some(best.path_string);
 						matched_id = Some(best.item_id);
-						eprintln!("Interpreted `{}` as `{}`", base_query, crate_query);
+						if !silent {
+							eprintln!("Interpreted `{}` as `{}`", base_query, crate_query);
+						}
 					} else if let Some((_ty_match, impl_id)) = resolve_impl_target(
 						&index,
 						&crate_data,
@@ -316,10 +333,13 @@ pub fn validate_add_target_or_error(
 						&crate_query,
 						is_local,
 						include_private,
+						silent,
 					) {
 						matched_path = Some(crate_query.clone());
 						matched_id = Some(impl_id);
-						eprintln!("Interpreted `{}` as `{}`", base_query, crate_query);
+						if !silent {
+							eprintln!("Interpreted `{}` as `{}`", base_query, crate_query);
+						}
 					}
 				}
 			}
@@ -329,14 +349,14 @@ pub fn validate_add_target_or_error(
 	let Some(matched_id) = matched_id else {
 		// Generate smart suggestions when no match found
 		let last_segment = base_query.rsplit("::").next().unwrap_or(&base_query);
-		
+
 		// Search by name
 		let mut options = SearchOptions::new(last_segment);
 		options.domains = SearchDomain::PATHS | SearchDomain::NAMES;
 		options.include_private = true;
 		let mut results = index.search(&options);
 		results.retain(|r| is_local(r));
-		
+
 		// Prioritize results:
 		// 1. Exact name match (highest priority)
 		// 2. Path suffix match (e.g., user typed "module::Item", we match "crate::module::Item")
@@ -351,7 +371,7 @@ pub fn validate_add_target_or_error(
 			let path_len = r.path_string.len();
 			(exact_name, suffix_match, path_len)
 		});
-		
+
 		results.truncate(5);
 		let suggestions = results
 			.iter()
@@ -475,15 +495,15 @@ pub fn find_target_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 /// This is used for --after-target/--before-target which should work with any stable entry key.
 pub fn find_entry_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 	use super::state::SkeleEntry;
-	
+
 	let mut matches: Vec<usize> = Vec::new();
 	let spec = spec.trim();
-	
+
 	// Normalize the spec for matching
 	let normalized_spec = std::path::PathBuf::from(spec);
 	let canonical_spec = normalized_spec.canonicalize().ok();
 	let spec_str = spec.replace('\\', "/");
-	
+
 	for (idx, entry) in entries.iter().enumerate() {
 		let is_match = match entry {
 			SkeleEntry::Target(t) => {
@@ -498,22 +518,22 @@ pub fn find_entry_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 				} else {
 					false
 				};
-				
+
 				// 2. Exact absolute path match
 				let absolute_match = r.file.to_str() == Some(spec);
-				
+
 				// 3. Canonical path match (handles ./foo vs foo)
 				let canon_path_match = if let Some(ref canon) = canonical_spec {
 					r.file.canonicalize().ok().as_ref() == Some(canon)
 				} else {
 					false
 				};
-				
+
 				canonical_match || absolute_match || canon_path_match
 			}
 			SkeleEntry::Injection(_) => false,
 		};
-		
+
 		if is_match {
 			matches.push(idx);
 		}
@@ -538,13 +558,16 @@ pub fn find_entry_match(entries: &[SkeleEntry], spec: &str) -> Result<usize> {
 				})
 				.take(10)
 				.collect();
-			
+
 			let available_str = if available_keys.is_empty() {
 				String::new()
 			} else {
-				format!("\n\nAvailable entry keys (first 10):\n{}", available_keys.join("\n"))
+				format!(
+					"\n\nAvailable entry keys (first 10):\n{}",
+					available_keys.join("\n")
+				)
 			};
-			
+
 			Err(RipdocError::InvalidTarget(format!(
 				"No entry matches '{spec}'.{}\n\nTip: Run `ripdoc skelebuild status` to see all entries.",
 				available_str
@@ -586,13 +609,19 @@ mod tests {
 
 	#[test]
 	fn test_target_entry_matches_spec_exact() {
-		assert!(target_entry_matches_spec("crate::module::Type", "crate::module::Type"));
+		assert!(target_entry_matches_spec(
+			"crate::module::Type",
+			"crate::module::Type"
+		));
 	}
 
 	#[test]
 	fn test_target_entry_matches_spec_suffix() {
 		assert!(target_entry_matches_spec("crate::module::Type", "Type"));
-		assert!(target_entry_matches_spec("crate::module::Type", "module::Type"));
+		assert!(target_entry_matches_spec(
+			"crate::module::Type",
+			"module::Type"
+		));
 	}
 
 	#[test]
@@ -606,7 +635,10 @@ mod tests {
 	#[test]
 	fn test_target_entry_matches_spec_no_match() {
 		assert!(!target_entry_matches_spec("crate::module::Type", "Other"));
-		assert!(!target_entry_matches_spec("crate::module::Type", "wrong::Type"));
+		assert!(!target_entry_matches_spec(
+			"crate::module::Type",
+			"wrong::Type"
+		));
 	}
 
 	#[test]

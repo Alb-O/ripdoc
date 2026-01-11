@@ -124,10 +124,11 @@ impl SkeleState {
 							pkg_root: last_root,
 							targets,
 						}) = grouped_entries.last_mut()
-							&& *last_root == pkg_root {
-								targets.push(t.clone());
-								continue;
-							}
+							&& *last_root == pkg_root
+						{
+							targets.push(t.clone());
+							continue;
+						}
 						grouped_entries.push(SkeleGroup::Targets {
 							pkg_root: pkg_root.clone(),
 							targets: vec![t.clone()],
@@ -231,43 +232,45 @@ impl SkeleState {
 							continue;
 						}
 
-					let base = match resolve_best_path_match(
-						&index,
-						crate_name.as_deref(),
-						&pkg_root,
-						&base_query,
-						is_local,
-						target.private,
-					) {
-						Some(base) => base,
-						None => {
-							// Support targeting an entire impl block via `Type::Trait`.
-							if let Some((ty_match, impl_id)) = resolve_impl_target(
-								&index,
-								crate_data,
-								crate_name.as_deref(),
-								&pkg_root,
-								&base_query,
-								is_local,
-								target.private,
-							) {
-								selection_results.push(ty_match);
-								full_source.insert(impl_id);
+						let base = match resolve_best_path_match(
+							&index,
+							crate_name.as_deref(),
+							&pkg_root,
+							&base_query,
+							is_local,
+							target.private,
+							ripdoc.silent(),
+						) {
+							Some(base) => base,
+							None => {
+								// Support targeting an entire impl block via `Type::Trait`.
+								if let Some((ty_match, impl_id)) = resolve_impl_target(
+									&index,
+									crate_data,
+									crate_name.as_deref(),
+									&pkg_root,
+									&base_query,
+									is_local,
+									target.private,
+									ripdoc.silent(),
+								) {
+									selection_results.push(ty_match);
+									full_source.insert(impl_id);
+									continue;
+								}
+								eprintln!("Warning: no matches found for: `{}`", base_query);
 								continue;
 							}
-							eprintln!("Warning: no matches found for: `{}`", base_query);
-							continue;
-						}
-					};
+						};
 
 						selection_results.push(base.clone());
 
 						if target.raw_source
 							&& let Some(item) = crate_data.index.get(&base.item_id)
-								&& let Some(span) = &item.span
-							{
-								raw_files.insert(span.filename.clone());
-							}
+							&& let Some(span) = &item.span
+						{
+							raw_files.insert(span.filename.clone());
+						}
 
 						if target.implementation {
 							if matches!(
@@ -400,12 +403,14 @@ impl SkeleState {
 				"Warning: {} target entries exist but rebuilt output is nearly empty ({} chars).",
 				target_count, trimmed_len
 			);
+			eprintln!("This may indicate that the targets could not be resolved. Common causes:");
 			eprintln!(
-				"This may indicate that the targets could not be resolved. Common causes:"
+				"  - Private items not visible in rustdoc output (use `ripdoc skelebuild add-raw` or `add-file` instead)"
 			);
-			eprintln!("  - Private items not visible in rustdoc output (use `ripdoc skelebuild add-raw` or `add-file` instead)");
 			eprintln!("  - Feature-gated modules not enabled (use `--features` when building)");
-			eprintln!("  - Incorrect module paths (use `ripdoc list --search <name> --private` to discover exact paths)");
+			eprintln!(
+				"  - Incorrect module paths (use `ripdoc list --search <name> --private` to discover exact paths)"
+			);
 		}
 
 		fs::write(&output_path, output)?;
