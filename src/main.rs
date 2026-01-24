@@ -166,22 +166,6 @@ struct ReadmeArgs {
 	common: CommonArgs,
 }
 
-#[derive(Debug, Clone, Copy, ValueEnum)]
-/// Optional topic for `ripdoc agents`.
-enum AgentsTopic {
-	/// Print command (`ripdoc print ...`).
-	Print,
-	/// Stateful skeleton builder (`ripdoc skelebuild ...`).
-	Skelebuild,
-}
-
-#[derive(Args, Clone)]
-struct AgentsArgs {
-	/// Optional agent guide topic.
-	#[arg(value_enum)]
-	topic: Option<AgentsTopic>,
-}
-
 #[derive(Args, Clone)]
 /// Arguments for the `skelebuild` subcommand.
 struct SkelebuildArgs {
@@ -410,8 +394,6 @@ enum SkelebuildSubcommand {
 #[derive(Subcommand, Clone)]
 enum Command {
 	/// Print a crate skeleton (default).
-	///
-	/// AI agents: see `ripdoc agents print` for detailed usage.
 	Print(PrintArgs),
 	/// Produce a structured item listing.
 	List(ListArgs),
@@ -419,23 +401,12 @@ enum Command {
 	Raw(PrintArgs),
 	/// Fetch and print the README of the target crate.
 	Readme(ReadmeArgs),
-	/// Print a dense guide for AI agents.
-	///
-	/// Also supports topic guides, e.g. `ripdoc agents skelebuild`.
-	Agents(AgentsArgs),
 	/// Build a skeleton incrementally.
-	///
-	/// AI agents: see `ripdoc agents skelebuild` for detailed usage.
 	Skelebuild(SkelebuildArgs),
 }
 
 #[derive(Parser)]
-#[command(
-	author,
-	version,
-	about,
-	long_about = "Query Rust docs and crate API from the command line.\n\nAI agents: run `ripdoc agents` for a dense usage guide."
-)]
+#[command(author, version, about, long_about = "Query Rust docs and crate API from the command line.")]
 /// Parsed command-line options for the ripdoc CLI.
 struct Cli {
 	#[command(subcommand)]
@@ -1366,18 +1337,6 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			run_list(&args.common, &args, &rs)
 		}
 		Command::Readme(args) => run_readme(&args.common, &args),
-		Command::Agents(args) => {
-			match args.topic {
-				None => print!("{}", include_str!("agents_ripdoc.md")),
-				Some(AgentsTopic::Print) => {
-					print!("{}", include_str!("agents_print.md"))
-				}
-				Some(AgentsTopic::Skelebuild) => {
-					print!("{}", include_str!("skelebuild/agents_skelebuild.md"))
-				}
-			}
-			Ok(())
-		}
 		Command::Skelebuild(args) => {
 			use ripdoc::skelebuild::SkeleAction;
 			let rs = build_ripdoc(&args.common);

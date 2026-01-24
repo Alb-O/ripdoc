@@ -1,4 +1,4 @@
-# Ripdoc `print`
+# print
 
 `print` renders rustdoc items as Markdown with optional source code. Use it for one-shot queries or piping into other tools.
 

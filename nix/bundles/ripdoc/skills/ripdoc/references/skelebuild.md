@@ -1,4 +1,4 @@
-# Ripdoc `skelebuild`
+# skelebuild
 
 `skelebuild` incrementally builds a Markdown "source map" by mixing API skeletons, selective implementation spans, and your own commentary. State is persisted at `~/.local/state/ripdoc/skelebuild.json`.
 
