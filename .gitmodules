@@ -1,3 +1,0 @@
-[submodule "nix/bundles/rust"]
-	path = nix/bundles/rust
-	url = https://github.com/imp-nix/bundle.rust

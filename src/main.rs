@@ -440,11 +440,7 @@ fn check_nightly_toolchain() -> Result<(), String> {
 		let output = ProcessCommand::new("rustc")
 			.arg("--version")
 			.output()
-			.map_err(|e| {
-				format!(
-					"Failed to run rustc: {e}\nEnsure nightly Rust is installed and available in PATH."
-				)
-			})?;
+			.map_err(|e| format!("Failed to run rustc: {e}\nEnsure nightly Rust is installed and available in PATH."))?;
 
 		if !output.status.success() {
 			return Err("ripdoc requires a nightly Rust toolchain.\nEnsure nightly Rust is installed and available in PATH.".to_string());
@@ -477,22 +473,15 @@ fn search_domains_from_filters(filters: &SearchFilterArgs) -> SearchDomain {
 	if filters.search_spec.is_empty() {
 		SearchDomain::default()
 	} else {
-		filters
-			.search_spec
-			.iter()
-			.fold(SearchDomain::empty(), |mut acc, spec| {
-				acc |= SearchDomain::from(*spec);
-				acc
-			})
+		filters.search_spec.iter().fold(SearchDomain::empty(), |mut acc, spec| {
+			acc |= SearchDomain::from(*spec);
+			acc
+		})
 	}
 }
 
 /// Build a `SearchOptions` value using the provided CLI configuration and query.
-fn build_search_options(
-	common: &CommonArgs,
-	filters: &SearchFilterArgs,
-	query: &str,
-) -> SearchOptions {
+fn build_search_options(common: &CommonArgs, filters: &SearchFilterArgs, query: &str) -> SearchOptions {
 	let mut options = SearchOptions::new(query);
 	options.include_private = common.private;
 	options.case_sensitive = filters.search_case_sensitive;
@@ -512,8 +501,7 @@ fn split_path_target_spec(value: &str) -> Option<(String, String)> {
 		return None;
 	}
 
-	let looks_like_path =
-		left.contains('/') || left.contains('\\') || left.starts_with('.') || left.starts_with('/');
+	let looks_like_path = left.contains('/') || left.contains('\\') || left.starts_with('.') || left.starts_with('/');
 	if looks_like_path || std::path::Path::new(left).exists() {
 		Some((left.to_string(), right.to_string()))
 	} else {
@@ -529,9 +517,7 @@ struct DiffHunk {
 }
 
 fn git_toplevel() -> Result<std::path::PathBuf, Box<dyn Error>> {
-	let toplevel = ProcessCommand::new("git")
-		.args(["rev-parse", "--show-toplevel"])
-		.output()?;
+	let toplevel = ProcessCommand::new("git").args(["rev-parse", "--show-toplevel"]).output()?;
 	if !toplevel.status.success() {
 		return Err("Failed to run `git rev-parse --show-toplevel`; are you in a git repo?".into());
 	}
@@ -563,9 +549,7 @@ fn git_diff_text(rev_spec: Option<&str>, staged: bool) -> Result<String, Box<dyn
 /// Returns the commit hash if found within the limit.
 fn find_rust_touching_commit(limit: usize) -> Result<String, Box<dyn Error>> {
 	// Get the last N commits
-	let output = ProcessCommand::new("git")
-		.args(["log", &format!("-{}", limit), "--format=%H"])
-		.output()?;
+	let output = ProcessCommand::new("git").args(["log", &format!("-{}", limit), "--format=%H"]).output()?;
 
 	if !output.status.success() {
 		return Err("Failed to run `git log`".into());
@@ -638,10 +622,7 @@ fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool)
 			continue;
 		};
 
-		let plus_idx = line
-			.find(" +")
-			.map(|i| i + 2)
-			.or_else(|| line.find('+').map(|i| i + 1));
+		let plus_idx = line.find(" +").map(|i| i + 2).or_else(|| line.find('+').map(|i| i + 1));
 		let Some(plus_idx) = plus_idx else {
 			continue;
 		};
@@ -670,10 +651,7 @@ fn parse_git_diff_hunks(diff: &str, git_root: &std::path::Path, only_rust: bool)
 	hunks
 }
 
-fn find_package_root(
-	file: &std::path::Path,
-	git_root: &std::path::Path,
-) -> Option<std::path::PathBuf> {
+fn find_package_root(file: &std::path::Path, git_root: &std::path::Path) -> Option<std::path::PathBuf> {
 	let mut cur = file.parent()?.to_path_buf();
 	loop {
 		if cur.join("Cargo.toml").exists() {
@@ -688,11 +666,7 @@ fn find_package_root(
 	}
 }
 
-fn resolve_changed_context(
-	hunks: &[DiffHunk],
-	rs: &Ripdoc,
-	common: &CommonArgs,
-) -> Result<(Vec<String>, Vec<String>), Box<dyn Error>> {
+fn resolve_changed_context(hunks: &[DiffHunk], rs: &Ripdoc, common: &CommonArgs) -> Result<(Vec<String>, Vec<String>), Box<dyn Error>> {
 	const CONTEXT_LINES: usize = 30;
 	const MAX_SNIPPET_LINES: usize = 220;
 	const MAX_ITEMS_PER_HUNK: usize = 6;
@@ -707,8 +681,7 @@ fn resolve_changed_context(
 	let mut seen_targets = std::collections::BTreeSet::new();
 	let mut seen_raw = std::collections::BTreeSet::new();
 
-	let mut hunks_by_pkg: std::collections::HashMap<std::path::PathBuf, Vec<&DiffHunk>> =
-		std::collections::HashMap::new();
+	let mut hunks_by_pkg: std::collections::HashMap<std::path::PathBuf, Vec<&DiffHunk>> = std::collections::HashMap::new();
 	for hunk in hunks {
 		let Some(pkg_root) = find_package_root(&hunk.file, &git_root) else {
 			continue;
@@ -758,10 +731,8 @@ fn resolve_changed_context(
 				path.canonicalize().unwrap_or(path)
 			};
 
-			let mut entries_by_file: std::collections::HashMap<
-				std::path::PathBuf,
-				Vec<&ripdoc::core_api::search::SearchResult>,
-			> = std::collections::HashMap::new();
+			let mut entries_by_file: std::collections::HashMap<std::path::PathBuf, Vec<&ripdoc::core_api::search::SearchResult>> =
+				std::collections::HashMap::new();
 			for entry in index.entries() {
 				let Some(item) = crate_data.index.get(&entry.item_id) else {
 					continue;
@@ -774,10 +745,7 @@ fn resolve_changed_context(
 			}
 
 			for hunk in &pkg_hunks {
-				let file = hunk
-					.file
-					.canonicalize()
-					.unwrap_or_else(|_| hunk.file.clone());
+				let file = hunk.file.canonicalize().unwrap_or_else(|_| hunk.file.clone());
 				let Some(entries) = entries_by_file.get(&file) else {
 					continue;
 				};
@@ -888,11 +856,7 @@ mod diff_tests {
 		let root = std::path::PathBuf::from("/repo");
 		let hunks = parse_git_diff_hunks(diff, &root, true);
 		assert_eq!(hunks.len(), 1);
-		let DiffHunk {
-			file,
-			start_line,
-			end_line,
-		} = &hunks[0];
+		let DiffHunk { file, start_line, end_line } = &hunks[0];
 		assert!(file.ends_with("src/lib.rs"));
 		assert_eq!((*start_line, *end_line), (10, 12));
 	}
@@ -952,11 +916,7 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 		}
 
 		let output = if should_color_output(common) {
-			highlight_matches(
-				&response.rendered,
-				trimmed,
-				args.filters.search_case_sensitive,
-			)
+			highlight_matches(&response.rendered, trimmed, args.filters.search_case_sensitive)
 		} else {
 			response.rendered
 		};
@@ -983,13 +943,7 @@ fn run_print(common: &CommonArgs, args: &PrintArgs, rs: &Ripdoc) -> Result<(), B
 
 /// Output raw rustdoc JSON.
 fn run_raw(common: &CommonArgs, target: &str, rs: &Ripdoc) -> Result<(), Box<dyn Error>> {
-	let output = rs.raw_json(
-		target,
-		common.no_default_features,
-		common.all_features,
-		common.features.clone(),
-		common.private,
-	)?;
+	let output = rs.raw_json(target, common.no_default_features, common.all_features, common.features.clone(), common.private)?;
 
 	println!("{output}");
 
@@ -1031,13 +985,7 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 			if !common.private {
 				println!("Tip: pass `--private` to include private items.");
 			}
-			if query.contains("::")
-				&& !args
-					.filters
-					.search_spec
-					.iter()
-					.any(|spec| matches!(spec, SearchSpec::Path))
-			{
+			if query.contains("::") && !args.filters.search_spec.iter().any(|spec| matches!(spec, SearchSpec::Path)) {
 				println!("Tip: pass `--search-spec path` to search canonical item paths.");
 			}
 		} else {
@@ -1058,25 +1006,14 @@ fn run_list(common: &CommonArgs, args: &ListArgs, rs: &Ripdoc) -> Result<(), Box
 		return Ok(());
 	}
 
-	let label_width = listings
-		.iter()
-		.map(|entry| entry.kind.label().len())
-		.max()
-		.unwrap_or(0);
-	let path_width = listings
-		.iter()
-		.map(|entry| entry.path.len())
-		.max()
-		.unwrap_or(0);
+	let label_width = listings.iter().map(|entry| entry.kind.label().len()).max().unwrap_or(0);
+	let path_width = listings.iter().map(|entry| entry.path.len()).max().unwrap_or(0);
 
 	let mut buffer = String::new();
 	for entry in listings {
 		let label = entry.kind.label();
 		let location = format_source_location(entry.source.as_ref());
-		let line = format!(
-			"{label:<label_width$} {path:<path_width$} {location}\n",
-			path = entry.path
-		);
+		let line = format!("{label:<label_width$} {path:<path_width$} {location}\n", path = entry.path);
 		let highlighted_line = if let Some(ref query) = trimmed_query {
 			if should_color_output(common) {
 				highlight_matches(&line, query, args.filters.search_case_sensitive)
@@ -1121,20 +1058,12 @@ fn run_readme(common: &CommonArgs, args: &ReadmeArgs) -> Result<(), Box<dyn Erro
 
 	// Determine the starting path for local README search
 	let search_path: Option<PathBuf> = match &target_parsed.entrypoint {
-		Entrypoint::Path(path) => Some(if path.is_absolute() {
-			path.clone()
-		} else {
-			env::current_dir()?.join(path)
-		}),
+		Entrypoint::Path(path) => Some(if path.is_absolute() { path.clone() } else { env::current_dir()?.join(path) }),
 		Entrypoint::Name { name: _, .. } => {
 			// Try to resolve target to see if it's a local workspace member or dependency
 			resolve_target(&args.target, common.offline)
 				.ok()
-				.and_then(|resolved_list| {
-					resolved_list
-						.first()
-						.map(|resolved| resolved.package_root().to_path_buf())
-				})
+				.and_then(|resolved_list| resolved_list.first().map(|resolved| resolved.package_root().to_path_buf()))
 		}
 	};
 
@@ -1174,10 +1103,7 @@ fn run_readme(common: &CommonArgs, args: &ReadmeArgs) -> Result<(), Box<dyn Erro
 				if let Some((crate_path, found_version)) = find_latest_cached_version(&name)? {
 					let cargo_path = ripdoc::cargo_utils::CargoPath::Path(crate_path);
 					if let Ok(Some(content)) = cargo_path.find_readme() {
-						eprintln!(
-							"Using cached version {} (latest available locally)",
-							found_version
-						);
+						eprintln!("Using cached version {} (latest available locally)", found_version);
 						println!("{}", content);
 						return Ok(());
 					}
@@ -1237,16 +1163,8 @@ fn highlight_matches(text: &str, query: &str, case_sensitive: bool) -> String {
 /// More efficient than regex for single-term searches.
 fn highlight_matches_simple(text: &str, query: &str, case_sensitive: bool) -> String {
 	let mut result = String::with_capacity(text.len() * 2);
-	let search_text = if case_sensitive {
-		text.to_string()
-	} else {
-		text.to_lowercase()
-	};
-	let search_query = if case_sensitive {
-		query.to_string()
-	} else {
-		query.to_lowercase()
-	};
+	let search_text = if case_sensitive { text.to_string() } else { text.to_lowercase() };
+	let search_query = if case_sensitive { query.to_string() } else { query.to_lowercase() };
 
 	let mut last_end = 0;
 	let mut search_start = 0;
@@ -1320,14 +1238,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 			run_print(&args.common, &args, &rs)
 		}
 		Command::Raw(args) => {
-			if args.item.is_some()
-				|| args.search.is_some()
-				|| args.implementation
-				|| args.raw_source
-			{
-				return Err(
-					"`ripdoc raw` only accepts a target (no item/search/source flags).".into(),
-				);
+			if args.item.is_some() || args.search.is_some() || args.implementation || args.raw_source {
+				return Err("`ripdoc raw` only accepts a target (no item/search/source flags).".into());
 			}
 			let rs = build_ripdoc(&args.common);
 			run_raw(&args.common, &args.target, &rs)
@@ -1381,10 +1293,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						let targets: Vec<String> = if items.is_empty() {
 							vec![target]
 						} else {
-							items
-								.into_iter()
-								.map(|item| format!("{target_prefix}::{item}"))
-								.collect()
+							items.into_iter().map(|item| format!("{target_prefix}::{item}")).collect()
 						};
 
 						if targets.len() == 1 {
@@ -1432,9 +1341,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							output = o;
 						}
 						let git_root = git_toplevel()?;
-						let revspec =
-							git.as_deref()
-								.unwrap_or(if staged { "--cached" } else { "HEAD" });
+						let revspec = git.as_deref().unwrap_or(if staged { "--cached" } else { "HEAD" });
 
 						eprintln!("Analyzing changes (revspec: {})...", revspec);
 
@@ -1462,28 +1369,18 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 							eprintln!("\nDiagnostics:");
 							eprintln!("  Resolved revspec: {}", revspec);
 							eprintln!("  Total changed files discovered: {}", all_files.len());
-							eprintln!(
-								"  Total hunks discovered (before filtering): {}",
-								all_hunks.len()
-							);
+							eprintln!("  Total hunks discovered (before filtering): {}", all_hunks.len());
 
 							if only_rust {
 								let files_filtered = all_files.len() - filtered_files.len();
 								let hunks_filtered = all_hunks.len() - filtered_hunks.len();
-								eprintln!(
-									"  Files filtered out by --only-rust: {}",
-									files_filtered
-								);
-								eprintln!(
-									"  Hunks filtered out by --only-rust: {}",
-									hunks_filtered
-								);
+								eprintln!("  Files filtered out by --only-rust: {}", files_filtered);
+								eprintln!("  Hunks filtered out by --only-rust: {}", hunks_filtered);
 
 								if hunks_filtered > 0 {
 									eprintln!("\nAll changes were filtered out by `--only-rust`.");
 									eprintln!("\nExcluded files (first 20):");
-									let non_rust_files: Vec<_> =
-										all_files.difference(&filtered_files).collect();
+									let non_rust_files: Vec<_> = all_files.difference(&filtered_files).collect();
 									for (i, file) in non_rust_files.iter().take(20).enumerate() {
 										eprintln!("  {}. {}", i + 1, file.display());
 									}
@@ -1491,19 +1388,13 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 										eprintln!("  ... and {} more", non_rust_files.len() - 20);
 									}
 									eprintln!("\nSuggestions:");
-									eprintln!(
-										"  - Try removing --only-rust to include all changed files"
-									);
-									eprintln!(
-										"  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)"
-									);
+									eprintln!("  - Try removing --only-rust to include all changed files");
+									eprintln!("  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)");
 								}
 							} else {
 								eprintln!("\nSuggestions:");
 								eprintln!("  - Verify the revspec is correct: {}", revspec);
-								eprintln!(
-									"  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)"
-								);
+								eprintln!("  - Try expanding the range (e.g., HEAD~2..HEAD or main..HEAD)");
 								if !staged {
 									eprintln!("  - Or use --staged to check staged changes");
 								}
@@ -1514,32 +1405,22 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 								eprintln!("\nSearching for recent Rust-touching commits...");
 								if let Ok(suggestion) = find_rust_touching_commit(50) {
 									eprintln!("  Found commit: {}", suggestion);
-									eprintln!(
-										"  Try: ripdoc skelebuild add-changed --git {}..HEAD --only-rust",
-										suggestion
-									);
+									eprintln!("  Try: ripdoc skelebuild add-changed --git {}..HEAD --only-rust", suggestion);
 								} else {
-									eprintln!(
-										"  No Rust-touching commit found in last 50 commits."
-									);
+									eprintln!("  No Rust-touching commit found in last 50 commits.");
 								}
 							}
 
 							return Ok(());
 						}
-						let (targets, raw_specs) =
-							resolve_changed_context(&filtered_hunks, &rs, &args.common)?;
+						let (targets, raw_specs) = resolve_changed_context(&filtered_hunks, &rs, &args.common)?;
 						if targets.is_empty() && raw_specs.is_empty() {
 							eprintln!("No changed context could be resolved.");
 							eprintln!("\nDiagnostics:");
 							eprintln!("  Hunks found: {}", filtered_hunks.len());
 							eprintln!("  Files changed: {}", filtered_files.len());
-							eprintln!(
-								"\nNote: Hunks were found but couldn't be resolved to rustdoc targets."
-							);
-							eprintln!(
-								"      This may happen if changes are in files without rustdoc coverage."
-							);
+							eprintln!("\nNote: Hunks were found but couldn't be resolved to rustdoc targets.");
+							eprintln!("      This may happen if changes are in files without rustdoc coverage.");
 							return Ok(());
 						}
 						Some(SkeleAction::AddChangedResolved { targets, raw_specs })
@@ -1612,8 +1493,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 								buf
 							} else {
 								// stdin is a TTY and no content provided
-								return Err(
-								"Missing required argument: <CONTENT>\n\n\
+								return Err("Missing required argument: <CONTENT>\n\n\
 								The `inject` command requires content to inject. You can provide it in one of these ways:\n\n\
 								  1. As a positional argument:\n\
 								     ripdoc skelebuild inject \"your content here\" --at 0\n\n\
@@ -1629,8 +1509,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 								     EOF\n\n\
 								  5. From a file:\n\
 								     ripdoc skelebuild inject --from-file path/to/file.txt --at 0"
-									.into(),
-							);
+									.into());
 							}
 						};
 
@@ -1650,10 +1529,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
 						}
 						Some(SkeleAction::Remove(target))
 					}
-					SkelebuildSubcommand::Reset {
-						output: o,
-						plain: p,
-					} => {
+					SkelebuildSubcommand::Reset { output: o, plain: p } => {
 						if o.is_some() {
 							output = o;
 						}
