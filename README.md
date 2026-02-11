@@ -10,9 +10,10 @@ Ripdoc is built to be the "eyes" of an AI agent in a Rust codebase.
 - `readme` subcommand prints just the contents of a crate's README.
 - `skelebuild` is a statefule, semi-interactive mode for constructing "source maps" for local crates that you or your agents are developing. The tool builds an output markdown file intelligently, inserting slices of contextual rust code in a correct, syntax-aware order and nesting. Agents can interleave API skeletons, implementation spans, and general markdown commentary to explain code and architecture for the next agent in the loop (or the user, if you care enough).
 
-For a dense techincal guide specifically for agent consumption:
-- `ripdoc agents` (general usage)
-- `ripdoc agents skelebuild` (skelebuild specific)
+For dense technical guides specifically for agent consumption, see:
+- `.agents/skills/ripdoc/SKILL.md` (general usage)
+- `.agents/skills/ripdoc/references/print.md` (`print` command details)
+- `.agents/skills/ripdoc/references/skelebuild.md` (`skelebuild` workflow)
 
 There is no MCP server for this tool. Long live skills!
 
