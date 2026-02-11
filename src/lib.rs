@@ -23,6 +23,5 @@ pub(crate) mod v2;
 // Re-export target parsing from cargo_utils
 pub use crate::cargo_utils::target;
 pub use crate::core_api::{
-	ListTreeNode, RenderFormat, Result, Ripdoc, SearchDomain, SearchItemKind, SearchOptions,
-	SearchResponse, SourceLocation, build_list_tree,
+	ListTreeNode, RenderFormat, Result, Ripdoc, SearchDomain, SearchItemKind, SearchOptions, SearchResponse, SourceLocation, build_list_tree,
 };

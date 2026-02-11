@@ -4,6 +4,8 @@
 //! crate documentation generation, and rendering. It is designed to be UI-agnostic and
 //! can be used by any frontend (CLI, GUI, language server, etc.).
 
+/// Backend selection and routing.
+pub mod backend;
 /// Error helpers for the core API.
 pub mod error;
 /// Hierarchical tree structure for organizing list output.
@@ -12,8 +14,6 @@ pub mod list_tree;
 pub mod pattern;
 /// Search and indexing utilities.
 pub mod search;
-/// Backend selection and routing.
-pub mod backend;
 use std::collections::HashSet;
 use std::fs;
 
@@ -21,9 +21,7 @@ use rustdoc_types::Crate;
 
 pub use self::error::Result;
 pub use self::list_tree::{ListTreeNode, build_list_tree};
-pub use self::search::{
-	ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse, SourceLocation,
-};
+pub use self::search::{ListItem, SearchDomain, SearchItemKind, SearchOptions, SearchResponse, SourceLocation};
 use self::search::{SearchIndex, build_render_selection};
 use super::cargo_utils::resolve_target;
 /// Target parsing helpers exposed through cargo_utils.
@@ -66,9 +64,7 @@ fn is_empty_output(rendered: &str) -> bool {
 	let normalized: String = rendered.chars().filter(|c| !c.is_whitespace()).collect();
 
 	// Match pattern: pubmod<identifier>{}
-	normalized.starts_with("pubmod")
-		&& normalized.ends_with("{}")
-		&& normalized.matches('{').count() == 1
+	normalized.starts_with("pubmod") && normalized.ends_with("{}") && normalized.matches('{').count() == 1
 }
 
 impl Default for Ripdoc {
@@ -194,14 +190,7 @@ impl Ripdoc {
 	/// * `all_features` - Whether to build with all features
 	/// * `features` - List of specific features to enable
 	/// * `private_items` - Whether to include private items in the output
-	pub fn inspect(
-		&self,
-		target: &str,
-		no_default_features: bool,
-		all_features: bool,
-		features: Vec<String>,
-		private_items: bool,
-	) -> Result<Vec<Crate>> {
+	pub fn inspect(&self, target: &str, no_default_features: bool, all_features: bool, features: Vec<String>, private_items: bool) -> Result<Vec<Crate>> {
 		let resolved_targets = resolve_target(target, self.offline)?;
 		let mut crates = Vec::with_capacity(resolved_targets.len());
 		for rt in resolved_targets {
@@ -231,6 +220,12 @@ impl Ripdoc {
 		implementation: bool,
 		raw_source: bool,
 	) -> Result<SearchResponse> {
+		#[cfg(feature = "v2-ts")]
+		if backend::active_backend() == backend::BackendKind::TreeSitter {
+			let _ = (no_default_features, all_features, &features, implementation, raw_source);
+			return crate::v2::search_v2(self, target, options);
+		}
+
 		let resolved_targets = resolve_target(target, self.offline)?;
 		let mut all_results = Vec::new();
 		let mut all_rendered = Vec::new();
@@ -245,11 +240,7 @@ impl Ripdoc {
 				&self.cache_config,
 			)?;
 
-			let index = SearchIndex::build(
-				&crate_data,
-				options.include_private,
-				Some(rt.package_root()),
-			);
+			let index = SearchIndex::build(&crate_data, options.include_private, Some(rt.package_root()));
 			let results = index.search(options);
 
 			if results.is_empty() {
@@ -277,22 +268,13 @@ impl Ripdoc {
 							rt.package_root().join(&span.filename)
 						};
 						if let Ok(content) = fs::read_to_string(&abs_path) {
-							raw_files_content.push_str(&format!(
-								"// ripdoc:source: {}\n\n{}\n\n",
-								span.filename.display(),
-								content
-							));
+							raw_files_content.push_str(&format!("// ripdoc:source: {}\n\n{}\n\n", span.filename.display(), content));
 						}
 					}
 				}
 			}
 
-			let selection = build_render_selection(
-				&index,
-				&results,
-				options.expand_containers,
-				full_source_ids,
-			);
+			let selection = build_render_selection(&index, &results, options.expand_containers, full_source_ids);
 			let renderer = Renderer::default()
 				.with_filter(&rt.filter)
 				.with_auto_impls(self.auto_impls)
@@ -327,10 +309,7 @@ impl Ripdoc {
 		include_private: bool,
 		search: Option<&SearchOptions>,
 	) -> Result<Vec<ListItem>> {
-		let include_private = include_private
-			|| search
-				.map(|options| options.include_private)
-				.unwrap_or(false);
+		let include_private = include_private || search.map(|options| options.include_private).unwrap_or(false);
 
 		#[cfg(feature = "v2-ts")]
 		if backend::active_backend() == backend::BackendKind::TreeSitter {
@@ -394,6 +373,12 @@ impl Ripdoc {
 		implementation: bool,
 		raw_source: bool,
 	) -> Result<String> {
+		#[cfg(feature = "v2-ts")]
+		if backend::active_backend() == backend::BackendKind::TreeSitter {
+			let _ = (no_default_features, all_features, &features, implementation, raw_source);
+			return crate::v2::render_v2(self, target, private_items);
+		}
+
 		let resolved_targets = resolve_target(target, self.offline)?;
 		let mut rendered_outputs = Vec::new();
 
@@ -436,11 +421,7 @@ impl Ripdoc {
 								rt.package_root().join(&span.filename)
 							};
 							if let Ok(content) = fs::read_to_string(&abs_path) {
-								raw_files_content.push_str(&format!(
-									"// ripdoc:source: {}\n\n{}\n\n",
-									span.filename.display(),
-									content
-								));
+								raw_files_content.push_str(&format!("// ripdoc:source: {}\n\n{}\n\n", span.filename.display(), content));
 							}
 						}
 					}
@@ -487,9 +468,7 @@ impl Ripdoc {
 
 		let separator = match self.render_format {
 			RenderFormat::Markdown => "\n\n---\n\n",
-			RenderFormat::Rust => {
-				"\n\n// ----------------------------------------------------------------------------\n\n"
-			}
+			RenderFormat::Rust => "\n\n// ----------------------------------------------------------------------------\n\n",
 		};
 
 		Ok(rendered_outputs.join(separator))
@@ -503,21 +482,8 @@ impl Ripdoc {
 	/// * `all_features` - Whether to build with all features
 	/// * `features` - List of specific features to enable
 	/// * `private_items` - Whether to include private items in the JSON output
-	pub fn raw_json(
-		&self,
-		target: &str,
-		no_default_features: bool,
-		all_features: bool,
-		features: Vec<String>,
-		private_items: bool,
-	) -> Result<String> {
-		let crates = self.inspect(
-			target,
-			no_default_features,
-			all_features,
-			features,
-			private_items,
-		)?;
+	pub fn raw_json(&self, target: &str, no_default_features: bool, all_features: bool, features: Vec<String>, private_items: bool) -> Result<String> {
+		let crates = self.inspect(target, no_default_features, all_features, features, private_items)?;
 
 		if crates.len() == 1 {
 			Ok(serde_json::to_string_pretty(&crates[0])?)

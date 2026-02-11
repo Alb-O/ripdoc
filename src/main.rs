@@ -1238,15 +1238,12 @@ fn should_skip_nightly_check(cli: &Cli) -> bool {
 		return false;
 	}
 
-	if !matches!(&cli.command, Command::List(_)) {
+	if !matches!(&cli.command, Command::List(_) | Command::Print(_)) {
 		return false;
 	}
 
 	let backend = std::env::var("RIPDOC_BACKEND").unwrap_or_default();
-	matches!(
-		backend.trim().to_ascii_lowercase().as_str(),
-		"ts" | "treesitter" | "tree-sitter"
-	)
+	matches!(backend.trim().to_ascii_lowercase().as_str(), "ts" | "treesitter" | "tree-sitter")
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn Error>> {

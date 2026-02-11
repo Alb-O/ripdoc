@@ -2,13 +2,15 @@
 
 use regex::Regex;
 
-use crate::core_api::pattern::escape_regex_preserving_pipes;
-use crate::core_api::{ListItem, SearchDomain, SearchOptions};
+use crate::core_api::pattern::{escape_regex_preserving_pipes, strip_symbols_preserving_pipes};
+use crate::core_api::{SearchDomain, SearchOptions};
 
-/// Filter list output using search options.
+use super::entry::V2Entry;
+
+/// Filter entries using `SearchOptions`.
 ///
-/// This slice currently supports `name` and `path` domains.
-pub(crate) fn filter_list(items: Vec<ListItem>, options: &SearchOptions) -> Vec<ListItem> {
+/// Supports `name`, `path`, `doc`, and `signature` domains.
+pub(crate) fn filter_entries(entries: Vec<V2Entry>, options: &SearchOptions) -> Vec<V2Entry> {
 	let mut opts = options.clone();
 	opts.ensure_domains();
 	let query = opts.query.trim();
@@ -16,87 +18,110 @@ pub(crate) fn filter_list(items: Vec<ListItem>, options: &SearchOptions) -> Vec<
 		return Vec::new();
 	}
 
-	let domains = opts.domains;
-	let case_sensitive = opts.case_sensitive;
-
 	if query.contains('|') {
-		filter_or_regex(items, query, domains, case_sensitive)
+		filter_or(entries, query, opts.domains, opts.case_sensitive)
 	} else {
-		filter_simple(items, query, domains, case_sensitive)
+		filter_simple(entries, query, opts.domains, opts.case_sensitive)
 	}
 }
 
-fn filter_simple(
-	items: Vec<ListItem>,
-	query: &str,
-	domains: SearchDomain,
-	case_sensitive: bool,
-) -> Vec<ListItem> {
-	let needle = if case_sensitive {
-		query.to_string()
-	} else {
-		query.to_lowercase()
-	};
+fn filter_simple(entries: Vec<V2Entry>, query: &str, domains: SearchDomain, case_sensitive: bool) -> Vec<V2Entry> {
+	let normalized_query = if case_sensitive { query.to_string() } else { query.to_lowercase() };
+	let stripped_query = strip_symbols_preserving_pipes(&normalized_query);
 
-	items
+	entries
 		.into_iter()
-		.filter(|item| {
+		.filter(|entry| {
 			let mut matched = false;
+
 			if domains.contains(SearchDomain::NAMES) {
-				let name = last_segment(&item.path);
-				matched |= contains(name, &needle, case_sensitive);
+				let name = if case_sensitive {
+					entry.name().to_string()
+				} else {
+					entry.name().to_lowercase()
+				};
+				matched |= name.contains(&normalized_query);
 			}
+
 			if domains.contains(SearchDomain::PATHS) {
-				matched |= contains(&item.path, &needle, case_sensitive);
+				let path = if case_sensitive { entry.path.clone() } else { entry.path.to_lowercase() };
+				matched |= path.contains(&normalized_query);
 			}
+
+			if domains.contains(SearchDomain::DOCS)
+				&& let Some(ref docs) = entry.docs
+			{
+				let docs = if case_sensitive { docs.clone() } else { docs.to_lowercase() };
+				let stripped_docs = strip_symbols_preserving_pipes(&docs);
+				matched |= stripped_docs.contains(&stripped_query);
+			}
+
+			if domains.contains(SearchDomain::SIGNATURES)
+				&& let Some(ref signature) = entry.signature
+			{
+				let signature = if case_sensitive { signature.clone() } else { signature.to_lowercase() };
+				let stripped_signature = strip_symbols_preserving_pipes(&signature);
+				matched |= stripped_signature.contains(&stripped_query);
+			}
+
 			matched
 		})
 		.collect()
 }
 
-fn filter_or_regex(
-	items: Vec<ListItem>,
-	pattern: &str,
-	domains: SearchDomain,
-	case_sensitive: bool,
-) -> Vec<ListItem> {
+fn filter_or(entries: Vec<V2Entry>, pattern: &str, domains: SearchDomain, case_sensitive: bool) -> Vec<V2Entry> {
 	let escaped = escape_regex_preserving_pipes(pattern);
-	let re = match if case_sensitive {
+	let regex = match if case_sensitive {
 		Regex::new(&escaped)
 	} else {
 		Regex::new(&format!("(?i){escaped}"))
 	} {
 		Ok(re) => re,
-		Err(_) => return filter_simple(items, pattern, domains, case_sensitive),
+		Err(_) => return filter_simple(entries, pattern, domains, case_sensitive),
 	};
 
-	items
+	let stripped_regex = if domains.intersects(SearchDomain::DOCS | SearchDomain::SIGNATURES) {
+		let stripped_pattern = strip_symbols_preserving_pipes(pattern);
+		let escaped_stripped = escape_regex_preserving_pipes(&stripped_pattern);
+		if case_sensitive {
+			Regex::new(&escaped_stripped).ok()
+		} else {
+			Regex::new(&format!("(?i){escaped_stripped}")).ok()
+		}
+	} else {
+		None
+	};
+
+	entries
 		.into_iter()
-		.filter(|item| {
+		.filter(|entry| {
 			let mut matched = false;
+
 			if domains.contains(SearchDomain::NAMES) {
-				matched |= re.is_match(last_segment(&item.path));
+				matched |= regex.is_match(entry.name());
 			}
+
 			if domains.contains(SearchDomain::PATHS) {
-				matched |= re.is_match(&item.path);
+				matched |= regex.is_match(&entry.path);
 			}
+
+			if let Some(ref stripped_re) = stripped_regex {
+				if domains.contains(SearchDomain::DOCS)
+					&& let Some(ref docs) = entry.docs
+				{
+					let stripped_docs = strip_symbols_preserving_pipes(docs);
+					matched |= stripped_re.is_match(&stripped_docs);
+				}
+
+				if domains.contains(SearchDomain::SIGNATURES)
+					&& let Some(ref signature) = entry.signature
+				{
+					let stripped_signature = strip_symbols_preserving_pipes(signature);
+					matched |= stripped_re.is_match(&stripped_signature);
+				}
+			}
+
 			matched
 		})
 		.collect()
-}
-
-fn contains(haystack: &str, needle: &str, case_sensitive: bool) -> bool {
-	if needle.is_empty() {
-		return false;
-	}
-
-	if case_sensitive {
-		haystack.contains(needle)
-	} else {
-		haystack.to_lowercase().contains(needle)
-	}
-}
-
-fn last_segment(path: &str) -> &str {
-	path.rsplit("::").next().unwrap_or(path)
 }

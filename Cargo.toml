@@ -13,6 +13,18 @@ keywords = ["docs", "documentation", "outline", "cli"]
 name = "ripdoc"
 path = "src/main.rs"
 
+[features]
+default = []
+v2-ts = [
+    "dep:tree-house-bindings",
+    "dep:tree-sitter-rust",
+    "dep:tree-sitter-language",
+    "dep:flate2",
+    "dep:tar",
+    "dep:glob",
+    "dep:regex-cursor",
+]
+
 [dependencies]
 bincode = { version = "2.0", default-features = false, features = ["serde", "std"] }
 bitflags = { version = "2.10", default-features = false }
@@ -20,36 +32,24 @@ cargo_metadata = { version = "0.23", default-features = false }
 cargo_toml = { version = "0.22", default-features = false }
 clap = { version = "4.5", features = ["derive"] }
 dirs = { version = "6.0", default-features = false }
+flate2 = { version = "1.0", default-features = false, features = ["rust_backend"], optional = true }
+glob = { version = "0.3", default-features = false, optional = true }
 once_cell = { version = "1.21", default-features = false, features = ["std"] }
 owo-colors = "4.2"
 regex = { version = "1.12", default-features = false, features = ["std", "unicode-case"] }
+regex-cursor = { version = "0.1.5", default-features = false, optional = true }
 rust-format = { version = "0.3", default-features = false }
 rustdoc-json = { version = "0.9", default-features = false }
 rustdoc-types = { version = "0.56", default-features = false }
 semver = { version = "1.0", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
-tempfile = { version = "3.23", default-features = false }
-ureq = { version = "3.1" }
-tree-house-bindings = { version = "0.2", default-features = false, features = ["tree-sitter-language"], optional = true }
-tree-sitter-rust = { version = "0.23", default-features = false, optional = true }
-tree-sitter-language = { version = "0.1", default-features = false, optional = true }
-flate2 = { version = "1.0", default-features = false, features = ["rust_backend"], optional = true }
 tar = { version = "0.4", default-features = false, optional = true }
-glob = { version = "0.3", default-features = false, optional = true }
-regex-cursor = { version = "0.1.5", default-features = false, optional = true }
-
-[features]
-default = []
-v2-ts = [
-	"dep:tree-house-bindings",
-	"dep:tree-sitter-rust",
-	"dep:tree-sitter-language",
-	"dep:flate2",
-	"dep:tar",
-	"dep:glob",
-	"dep:regex-cursor",
-]
+tempfile = { version = "3.23", default-features = false }
+tree-house-bindings = { version = "0.2", default-features = false, features = ["tree-sitter-language"], optional = true }
+tree-sitter-language = { version = "0.1", default-features = false, optional = true }
+tree-sitter-rust = { version = "0.23", default-features = false, optional = true }
+ureq = { version = "3.1" }
 
 [dev-dependencies]
 pretty_assertions = "1.4"

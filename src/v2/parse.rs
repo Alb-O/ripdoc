@@ -6,23 +6,17 @@ use std::path::Path;
 use regex_cursor::Cursor;
 use tree_house_bindings::{Grammar, Input, Parser, Tree};
 
-use crate::core_api::error::RipdocError;
 use crate::core_api::Result;
+use crate::core_api::error::RipdocError;
 
 pub(crate) fn parse_file(path: &Path) -> Result<(String, Tree)> {
-	let text = std::fs::read_to_string(path).map_err(|e| {
-		RipdocError::InvalidTarget(format!(
-			"Failed to read source file '{}': {e}",
-			path.display()
-		))
-	})?;
+	let text = std::fs::read_to_string(path).map_err(|e| RipdocError::InvalidTarget(format!("Failed to read source file '{}': {e}", path.display())))?;
 	let tree = parse_source(&text)?;
 	Ok((text, tree))
 }
 
 pub(crate) fn parse_source(text: &str) -> Result<Tree> {
-	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE)
-		.map_err(|e| RipdocError::InvalidTarget(format!("Failed to load Rust grammar: {e}")))?;
+	let grammar = Grammar::try_from(tree_sitter_rust::LANGUAGE).map_err(|e| RipdocError::InvalidTarget(format!("Failed to load Rust grammar: {e}")))?;
 	let mut parser = Parser::new();
 	parser
 		.set_grammar(grammar)
