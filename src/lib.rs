@@ -16,6 +16,9 @@ pub mod skelebuild;
 /// Core API for ripdoc operations.
 pub mod core_api;
 
+#[cfg(feature = "v2-ts")]
+pub(crate) mod v2;
+
 // Re-export main public API from core_api
 // Re-export target parsing from cargo_utils
 pub use crate::cargo_utils::target;

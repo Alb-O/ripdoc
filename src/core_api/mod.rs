@@ -12,6 +12,8 @@ pub mod list_tree;
 pub mod pattern;
 /// Search and indexing utilities.
 pub mod search;
+/// Backend selection and routing.
+pub mod backend;
 use std::collections::HashSet;
 use std::fs;
 
@@ -329,6 +331,12 @@ impl Ripdoc {
 			|| search
 				.map(|options| options.include_private)
 				.unwrap_or(false);
+
+		#[cfg(feature = "v2-ts")]
+		if backend::active_backend() == backend::BackendKind::TreeSitter {
+			let _ = (no_default_features, all_features, &features);
+			return crate::v2::list_v2(self, target, include_private, search);
+		}
 
 		let resolved_targets = resolve_target(target, self.offline)?;
 		let mut all_results = Vec::new();

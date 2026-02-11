@@ -1218,7 +1218,9 @@ fn highlight_matches_regex(text: &str, pattern: &str, case_sensitive: bool) -> S
 
 fn main() {
 	let cli = Cli::parse();
-	if let Err(e) = check_nightly_toolchain() {
+	if !should_skip_nightly_check(&cli)
+		&& let Err(e) = check_nightly_toolchain()
+	{
 		eprintln!("{e}");
 		process::exit(1);
 	}
@@ -1229,6 +1231,22 @@ fn main() {
 		eprintln!("{e}");
 		process::exit(1);
 	}
+}
+
+fn should_skip_nightly_check(cli: &Cli) -> bool {
+	if !cfg!(feature = "v2-ts") {
+		return false;
+	}
+
+	if !matches!(&cli.command, Command::List(_)) {
+		return false;
+	}
+
+	let backend = std::env::var("RIPDOC_BACKEND").unwrap_or_default();
+	matches!(
+		backend.trim().to_ascii_lowercase().as_str(),
+		"ts" | "treesitter" | "tree-sitter"
+	)
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn Error>> {
